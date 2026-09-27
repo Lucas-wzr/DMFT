@@ -28,12 +28,11 @@ namespace DMFT
     const std::vector<double>& spectra_window(){return this->DOS_window;}
 
     private:
-    // Input parameter
+    // Input parameters read from DMFT.in, with defaults assigned in read().
+    // Integer flags and hyb_func are internal representations of input options.
     int flag_DFT_solver;            //1:aims, 2:ABACUS
     double temperature;             //unit:Kelvin; default:300
     int flag_magnetism;             //AFM:1, FM:2, paramagenetism:3, none:4
-    int n_tau;                      //number of segments on the interval [0,beta] when using CTQMC impuroty solver;default:500
-    int n_omega;                    //number of Matsubara frequency points
     //ALPS-CTHYB:1;  LPS-CTHYB-SEGMENT:2; (not supported now)
     //PACS:3; Rutgers-CTHYB:4; iQIST:5; ComCTQMC:6; default:4
     int flag_impurity_solver;    
@@ -43,12 +42,9 @@ namespace DMFT
     int charge_step_max;            //number of the maximum charge self-consistent interation loop; default:1
     int DMFT_step_max;              //number of the maximum DMFT interation step under each charge loop; default:1
     int DFT_step_max;               //number of the maximum DFT interation step under each charge loop; default:1
-    long long MC_step;              //numuber of MC sampling steps; default:1000
-    int comctqmc_nproc;              //0: use allocated physical cores on the launching node
-    long long warmup;               //warmup updates per chain; currently used only by ComCTQMC
-    std::string comctqmc_exe, comctqmc_evalsim, comctqmc_launcher;
-    std::vector<double> proj_window;  //Energy window for hybridization function; default proj_window[0]=-5.0, proj_window[1]=5.0;
-    std::vector<double> DOS_window;   //Energy window for DOS; default proj_window[0]=proj_window[0], proj_window[1]=proj_window[1];
+    long long MC_step;              //number of MC sampling steps; default:5000000
+    std::vector<double> proj_window;  //projection_window: energy window for hybridization function
+    std::vector<double> DOS_window;   //dos_window: energy window for DOS
     bool hyb_func;                  //Whether hybrid functional is used or not; default:false
     double hyf_xc_alpha;            //The mixing factor in hybrid funtional; default:1.0;
     int flag_hyf_dc_mode;           //jacob:1; jacob_dp:2; default:1
@@ -60,23 +56,34 @@ namespace DMFT
     int calculation_type;           //DFT+DMFT scf:0; spectra:1; default:0
     int mixing_step;                //Number of past iteration include in the density mixing; default:8
 
-    std::string dft_solver_exe;     //the executable of DFT solver
-
-    //restart
-    bool flag_restart;              
+    // Four values supplied by the restart input keyword.
     int start_charge_step;          //The starting step of charge loop; default:1
     int start_DMFT_step;            //The stsrting step of DMFT loop; default:1
     int last_charge_step;           //The last one step before the starting step of charge loop; default:1
-    int last_DMFT_step;             //The last one tsep before the stsrting step of DMFT loop; default:1
+    int last_DMFT_step;             //The last one step before the stsrting step of DMFT loop; default:1
 
-    //parameters determined by input temperature
-    double beta;                 //1/(k_b*T); unit:1/Hartree
+    int flag_projector;             //nao (compatibility alias: default):1; cwf:2; default:nao
+    double cwf_ep0;                 //lower CWF window edge relative to E_F; unit:eV; default:-5.0
+    double cwf_ep1;                 //upper CWF window edge relative to E_F; unit:eV; default:5.0
+    double cwf_t;                   //CWF window smoothing energy, independent of temperature; unit:eV; default:0.01
 
-    int flag_projector;             //The flag of projector  nao:1; cwf:2; default:1
-    double cwf_ep0;                 //epsilon_0 in the closest wannier function; default: -5.0
-    double cwf_ep1;                 //epsilon_1 in the closest wannier function; default: 5.0
-    double cwf_t;                   //kB*T in the closest wannier function; default: 0.01
-    double projection_min_weight;   //Minimum eigenvalue of the unweighted projector Gram matrix; default:0.9
+    // Derived parameters computed in read(); not independent DMFT.in keywords.
+    double beta;                   //from temperature: 1/(k_b*T); unit:1/Hartree
+    // T in K, k_B in eV/K; truncate to int, then add 1 if odd.
+    int n_tau;                     //CTQMC imaginary-time segments: int(25 eV/(k_B*T))
+    int n_omega;                   //Matsubara frequency points: int(100 eV/(PI*k_B*T))
+    bool flag_restart;             //true if start_charge_step>1 or start_DMFT_step>1
+
+    // Legacy member: reading dft_solver_exe is currently disabled in read().
+    std::string dft_solver_exe;     //the executable of DFT solver
 
   };
 }
+
+// TODO: Improve parameter management, drawing on ABACUS and FHI-aims:
+// - Separate user inputs, derived parameters, and mutable runtime state.
+// - Organize reading/defaults, validation, and derived calculations explicitly.
+// - Replace parameter(keyword) returning const void* with typed accessors or
+//   read-only typed members, so callers do not need manual pointer casts.
+// - Choose strings or named enums for options as appropriate; avoid requiring
+//   all options to be numeric flags or introducing a full registration framework.

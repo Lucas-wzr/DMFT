@@ -308,8 +308,7 @@ namespace DMFT
     }
     catch(const bool not_given){
       // GLV::ofs_running << "Warning: energy_window is not given and set default value -5.0~5.0" << std::endl;
-      this->proj_window[0] = -5.0;
-      this->proj_window[1] = 5.0;
+      this->proj_window = {-5.0, 5.0};
     }
     GLV::ofs_running << "projection_window  " 
             << std::setprecision(3) << this->proj_window[0] 
@@ -329,8 +328,7 @@ namespace DMFT
       std::exit(EXIT_FAILURE);
     }
     catch(const bool not_given){
-      this->DOS_window[0] = this->proj_window[0];
-      this->DOS_window[1] = this->proj_window[0];
+      this->DOS_window = this->proj_window;
     }
     if(this->DOS_window[0]>this->proj_window[0] || this->DOS_window[1]<this->proj_window[1]){
       std::cerr << "The DOS window must be larger than projection window!!!" << std::endl;
@@ -495,7 +493,7 @@ namespace DMFT
       std::vector<std::string> str_val;
       this->read_parameter("mc_step", str_val);
 
-      this->MC_step = std::atoll(str_val[0].c_str());
+      this->MC_step = std::stoll(str_val[0]);
     }
     catch (const std::string messg) {
       std::cerr << messg << std::endl;
@@ -567,15 +565,15 @@ namespace DMFT
       this->read_parameter("projector", str_val);
 
       const std::string projector_name = this->strtolower(str_val[0]);
-      if(std::strcmp("default", projector_name.c_str())==0 ||
-         std::strcmp("nao", projector_name.c_str())==0)
+      if(std::strcmp("nao", projector_name.c_str())==0 ||
+         std::strcmp("default", projector_name.c_str())==0)
         this->flag_projector = 1;
       else if(std::strcmp("cwf", projector_name.c_str())==0)
         this->flag_projector = 2;
       else
       {
         std::cerr << "Unsupported projector '" << str_val[0]
-                  << "'; expected default (legacy alias: nao) or cwf"
+                  << "'; expected nao (compatibility alias: default) or cwf"
                   << std::endl;
         std::exit(EXIT_FAILURE);
       }
@@ -588,7 +586,7 @@ namespace DMFT
     catch(const bool not_given){
       this->flag_projector = 1;
     }
-    if(this->flag_projector ==1) GLV::ofs_running << "projector  default" << std::endl;
+    if(this->flag_projector ==1) GLV::ofs_running << "projector  nao" << std::endl;
     else if(this->flag_projector ==2) GLV::ofs_running << "projector  cwf" << std::endl;
 
     try {
@@ -1038,3 +1036,8 @@ namespace DMFT
   }
 
 }
+
+// TODO: Borrow ABACUS's Input_Item approach to define parameter names, types,
+// options, defaults, and target members centrally, and read DMFT.in in one pass
+// with shared conversion and logging. Handle dependent defaults, cross-parameter
+// checks, and derived quantities explicitly after reading the inputs.
