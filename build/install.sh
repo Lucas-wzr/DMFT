@@ -395,7 +395,7 @@ CPLUSPLUS_MPI = $MPI_CXX
 OPTIONS = -g -O3 -std=c++14
 MACRO = $MACRO_ABACUS
 INCLUDES = -I\${MKLROOT}/include
-LIB_MKL = -L\${MKLROOT}/lib/intel64 -lmkl_intel_lp64 -lmkl_sequential -lmkl_core
+LIB_MKL = -L\${MKLROOT}/lib/intel64 -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lifport -lifcoremt
 LIB_PACS = -L${root_dir}/build/impurities/PACS -l:libpacs.a
 LIB_iQIST = -L${root_dir}/build/impurities/iQIST/ct_hyb1 -l:libnarcissus.a \\
 -L${root_dir}/build/impurities/iQIST/dependencies/Flink -l:libflink.a
