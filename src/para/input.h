@@ -15,13 +15,8 @@ namespace DMFT
 
     bool read_parameter(char* keyword, std::vector<std::string>& val, int count=1);
 
-    static std::string strtolower(char *in_str);
     static std::string strtolower(std::string in_str);
 
-    void test();    //test whether input parameter is correct
-                    
-    void out();     //test whether reading worked corrected            
-    
     const void* parameter(char* keyword);    //   interfaces
 
     const std::vector<double>& projection_window(){return this->proj_window;}
