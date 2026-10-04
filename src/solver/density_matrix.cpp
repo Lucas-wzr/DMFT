@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
+#include <fstream>
+#include <iomanip>
 
 namespace DFT_plus_DMFT
 {
@@ -20,6 +22,63 @@ namespace density_matrix
             const double e = std::exp(-std::abs(x));
             return x >= 0.0 ? e / (1.0 + e) : 1.0 / (1.0 + e);
         }
+    }
+
+    std::vector<RealMatrix> density_matrix_R(
+        const std::vector<Matrix>& D_k,
+        const std::vector<std::array<double, 3>>& k,
+        const std::vector<double>& weights,
+        const std::vector<std::array<int, 3>>& R, double spin_factor)
+    {
+        if(D_k.empty() || D_k.size()!=k.size() || k.size()!=weights.size())
+            throw std::invalid_argument("density_matrix_R: inconsistent k arrays");
+        const int nbasis = D_k.front().rows();
+        auto D_R = std::vector<RealMatrix>(R.size(), RealMatrix::Zero(nbasis, nbasis));
+        for(int ik=0; ik<int(k.size()); ik++){
+            for(int ir=0; ir<int(R.size()); ir++){
+                double kR = 0.0;
+                for(int axis=0; axis<3; axis++) kR += k[ik][axis]*R[ir][axis];
+                const auto phase = std::exp(std::complex<double>(0.0, -2.0*GLC::PI*kR));
+                D_R[ir] += spin_factor*weights[ik]*(phase*D_k[ik]).real();
+            }
+        }
+        return D_R;
+    }
+
+    void write_density_matrix_R(
+        const std::string& filename,
+        const std::vector<std::array<int, 3>>& R,
+        const std::vector<RealMatrix>& D_R, double threshold)
+    {
+        const int nbasis = D_R.front().rows();
+        std::ofstream output(filename);
+        output << "STEP: 1\nMatrix Dimension of density matrix: " << nbasis
+               << "\nMatrix number of density matrix: " << R.size() << "\n";
+        output << std::scientific << std::setprecision(17);
+        for(int ir=0; ir<int(R.size()); ir++){
+            std::vector<double> values;
+            std::vector<int> columns;
+            auto row_pointer = std::vector<int>(nbasis+1, 0);
+            for(int row=0; row<nbasis; row++){
+                for(int col=0; col<nbasis; col++){
+                    const double value = D_R[ir](row,col);
+                    if(std::abs(value)>threshold){
+                        values.push_back(value);
+                        columns.push_back(col);
+                    }
+                }
+                row_pointer[row+1] = values.size();
+            }
+            output << R[ir][0] << " " << R[ir][1] << " " << R[ir][2] << " " << values.size() << "\n";
+            for(double value : values) output << value << " ";
+            output << "\n";
+            for(int col : columns) output << col << " ";
+            output << "\n";
+            for(int offset : row_pointer) output << offset << " ";
+            output << "\n";
+        }
+        output.close();
+        if(!output) throw std::runtime_error("Failed writing density matrix: "+filename);
     }
 
     Matrix density_matrix_window(
@@ -137,6 +196,39 @@ namespace density_matrix
     }
 
     // Interfaces for flattened row-major vector matrices.
+    std::vector<std::vector<double>> density_matrix_R(
+        const std::vector<std::vector<std::complex<double>>>& D_k, int nbasis,
+        const std::vector<std::array<double, 3>>& k,
+        const std::vector<double>& weights,
+        const std::vector<std::array<int, 3>>& R, double spin_factor)
+    {
+        auto matrices = std::vector<Matrix>(D_k.size());
+        for(int ik=0; ik<int(D_k.size()); ik++){
+            if(nbasis<=0 || D_k[ik].size()!=std::size_t(nbasis)*nbasis)
+                throw std::invalid_argument("density_matrix_R: invalid vector matrix size");
+            matrices[ik] = Eigen::Map<const Matrix>(D_k[ik].data(), nbasis, nbasis);
+        }
+        const auto D_R = density_matrix_R(matrices, k, weights, R, spin_factor);
+        auto result = std::vector<std::vector<double>>(R.size());
+        for(int ir=0; ir<int(R.size()); ir++)
+            result[ir].assign(D_R[ir].data(), D_R[ir].data()+D_R[ir].size());
+        return result;
+    }
+
+    void write_density_matrix_R(
+        const std::string& filename,
+        const std::vector<std::array<int, 3>>& R,
+        const std::vector<std::vector<double>>& D_R, int nbasis, double threshold)
+    {
+        auto matrices = std::vector<RealMatrix>(D_R.size());
+        for(int ir=0; ir<int(D_R.size()); ir++){
+            if(nbasis<=0 || D_R[ir].size()!=std::size_t(nbasis)*nbasis)
+                throw std::invalid_argument("write_density_matrix_R: invalid vector matrix size");
+            matrices[ir] = Eigen::Map<const RealMatrix>(D_R[ir].data(), nbasis, nbasis);
+        }
+        write_density_matrix_R(filename, R, matrices, threshold);
+    }
+
     std::vector<std::complex<double>> density_matrix_window(
         const std::vector<double>& epsilon,
         const std::vector<std::vector<std::complex<double>>>& sigma,
