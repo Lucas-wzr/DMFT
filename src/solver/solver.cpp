@@ -67,6 +67,20 @@ namespace DFT_plus_DMFT
     int mix_step = 1;
     bool density_convergency = false;
     bool sigma_convergency = false;
+    const bool abacus_charge = *(int*)pars.in.parameter("dft_solver")==2 &&
+                               *(int*)pars.in.parameter("max_charge_step")>1;
+    Charge_SCF_abacus abacus_backend;
+    if(abacus_charge){
+      try{
+        if(*(int*)pars.in.parameter("start_charge_step")!=1)
+          throw std::runtime_error("ABACUS outer-loop restart is not yet supported");
+        abacus_backend.init();
+      }
+      catch(const std::exception& error){
+        std::cerr<<error.what()<<std::endl;
+        MPI_Abort(MPI_COMM_WORLD,1);
+      }
+    }
     int last_char_step = *(int*)this->pars.in.parameter("last_charge_step");
     int last_DMFT_step = *(int*)this->pars.in.parameter("last_dmft_step");
     const int max_DMFT_step = *(int*)this->pars.in.parameter("max_dmft_step");
@@ -84,6 +98,9 @@ namespace DFT_plus_DMFT
       GLV::ofs_running << "<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>" << std::endl;
 
       this->pars.bands.read();
+
+      if(abacus_charge && loop_count>1)
+        this->space.KS_bands_window(2,pars.bands,pars.atom,pars.in);
 
       if(loop_count==1){
         if(char_step==1)
@@ -108,7 +125,8 @@ namespace DFT_plus_DMFT
             pars.bands, this->space, this->pars.atom,
             *(double*)pars.in.parameter("cwf_ep0"),
             *(double*)pars.in.parameter("cwf_ep1"),
-            *(double*)pars.in.parameter("cwf_t") );
+            *(double*)pars.in.parameter("cwf_t"),
+            *(double*)pars.in.parameter("projection_min_weight") );
 
       this->imp.evaluate_local_occupation( 
             this->pars.in, this->pars.bands, 
@@ -164,7 +182,26 @@ namespace DFT_plus_DMFT
       }//dmft loop
       GLV::ofs_running << "================ End of DMFT loop ================\n" << std::endl;
 
-      if( *(int*)this->pars.in.parameter("max_charge_step") > 1 && 
+      if(abacus_charge){
+        if(!sigma_convergency){
+          std::cerr<<"ABACUS charge loop stopped: DMFT did not converge"<<std::endl;
+          MPI_Abort(MPI_COMM_WORLD,1);
+        }
+        if(char_step<*(int*)pars.in.parameter("max_charge_step")){
+          try{ density_convergency=abacus_backend.update(*this,char_step); }
+          catch(const std::exception& error){
+            std::cerr<<error.what()<<std::endl;
+            MPI_Abort(MPI_COMM_WORLD,1);
+          }
+          if(density_convergency){
+            GLV::ofs_running<<"The DFT+DMFT calculation has converged!!!"<<std::endl;
+            break;
+          }
+        }else{
+          GLV::ofs_running<<"ABACUS charge loop reached max_charge_step without charge convergence"<<std::endl;
+        }
+      }
+      else if( *(int*)this->pars.in.parameter("max_charge_step") > 1 &&
           char_step < *(int*)this->pars.in.parameter("max_charge_step") )
       {
         //==============================================================
@@ -400,7 +437,8 @@ namespace DFT_plus_DMFT
           pars.bands, this->space, this->pars.atom,
           *(double*)pars.in.parameter("cwf_ep0"),
           *(double*)pars.in.parameter("cwf_ep1"),
-          *(double*)pars.in.parameter("cwf_t") );
+          *(double*)pars.in.parameter("cwf_t"),
+          *(double*)pars.in.parameter("projection_min_weight") );
 
     this->imp.evaluate_local_occupation( 
           this->pars.in, this->pars.bands, 
@@ -535,7 +573,8 @@ namespace DFT_plus_DMFT
           pars.bands, this->space, this->pars.atom,
           *(double*)pars.in.parameter("cwf_ep0"),
           *(double*)pars.in.parameter("cwf_ep1"),
-          *(double*)pars.in.parameter("cwf_t") );
+          *(double*)pars.in.parameter("cwf_t"),
+          *(double*)pars.in.parameter("projection_min_weight") );
 
     this->imp.evaluate_local_occupation( 
           this->pars.in, this->pars.bands, 
@@ -777,4 +816,3 @@ namespace DFT_plus_DMFT
   }
 
 }
-

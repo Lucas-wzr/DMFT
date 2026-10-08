@@ -73,6 +73,7 @@ namespace DMFT
     double cwf_ep0;                 //epsilon_0 in the closest wannier function; default: -5.0
     double cwf_ep1;                 //epsilon_1 in the closest wannier function; default: 5.0
     double cwf_t;                   //kB*T in the closest wannier function; default: 0.01
+    double projection_min_weight;   //Minimum eigenvalue of the unweighted projector Gram matrix; default:0.9
 
   };
 }

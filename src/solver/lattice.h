@@ -2,14 +2,12 @@
 
 #include <complex>
 #include <vector>
-#include <Eigen/Core>
+#include "../matrix_types.h"
 
 namespace DFT_plus_DMFT
 {
 namespace lattice
 {
-    using Matrix = Eigen::Matrix<std::complex<double>, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
-
     std::vector<Matrix> self_energy(
         int n_band_window, int n_omega,
         const std::vector<Matrix>& P,

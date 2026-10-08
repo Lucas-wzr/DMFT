@@ -536,6 +536,24 @@ namespace DMFT
     if(this->flag_projector ==1) GLV::ofs_running << "projector  default" << std::endl;
     else if(this->flag_projector ==2) GLV::ofs_running << "projector  cwf" << std::endl;
 
+    try {
+      std::vector<std::string> str_val;
+      this->read_parameter("projection_min_weight", str_val);
+      this->projection_min_weight = parse_cwf_value("projection_min_weight", str_val[0]);
+    }
+    catch(const std::string messg){
+      std::cerr << messg << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    catch(const bool not_given){
+      this->projection_min_weight = 0.9;
+    }
+    if(!(this->projection_min_weight > 0.0 && this->projection_min_weight <= 1.0)){
+      std::cerr << "projection_min_weight must be in (0,1]" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    GLV::ofs_running << "projection_min_weight  " << this->projection_min_weight << std::endl;
+
     //closest wannier function
     try {
       std::vector<std::string> str_val;
@@ -825,6 +843,7 @@ namespace DMFT
           std::strcmp("hyf_dc_shift_d", key_str_lower.c_str())==0 ||
           std::strcmp("hyf_dc_shift_p", key_str_lower.c_str())==0 ||
           std::strcmp("projector", key_str_lower.c_str())==0 ||
+          std::strcmp("projection_min_weight", key_str_lower.c_str())==0 ||
           std::strcmp("cwf_ep0", key_str_lower.c_str())==0 ||
           std::strcmp("cwf_ep1", key_str_lower.c_str())==0 ||
           std::strcmp("cwf_t", key_str_lower.c_str())==0 ||
@@ -910,6 +929,7 @@ namespace DMFT
     else if (std::strcmp("cwf_ep1", word.c_str()) == 0) return &cwf_ep1;
     else if (std::strcmp("cwf_t", word.c_str()) == 0) return &cwf_t;
     else if (std::strcmp("projector", word.c_str()) == 0) return &flag_projector;
+    else if (std::strcmp("projection_min_weight", word.c_str()) == 0) return &projection_min_weight;
     else if (std::strcmp("nf", word.c_str()) == 0) return &nf;
     else
     {
