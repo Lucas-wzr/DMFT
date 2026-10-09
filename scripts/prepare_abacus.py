@@ -2,7 +2,7 @@
 from pathlib import Path
 import json
 import numpy as np
-from abacus_io import input_parameters, lattice_vectors, output_directory
+from abacus_io import input_parameters, lattice_vectors, output_directory, prepare_density_reference
 
 root = Path.cwd()
 config = json.loads((root/'abacus_charge.json').read_text())
@@ -25,4 +25,7 @@ for key, name, candidates in [
         source = next((output/file for file in candidates if (output/file).exists()), None)
     if source is None or not source.exists():
         raise FileNotFoundError(f'Set {key} in abacus_charge.json')
-    target.symlink_to(source.resolve())
+    if key == 'reference_density_matrix':
+        prepare_density_reference(source, target)
+    else:
+        target.symlink_to(source.resolve())

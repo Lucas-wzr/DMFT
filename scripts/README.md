@@ -36,7 +36,7 @@
 python /path/to/DMFT-dev/scripts/prepare_abacus.py
 ```
 
-脚本写入 `abacus_charge_volume.dat`（bohr³），并链接初始 `abacus_charge_reference.csr` 和 `abacus_charge_reference.cube`。已有参考文件保持原样。若自动识别不到输出，配置中可显式给出 `reference_density_matrix`、`reference_cube` 路径，两者也相对于计算目录解析。
+脚本写入 `abacus_charge_volume.dat`（bohr³），并准备初始 `abacus_charge_reference.csr` 和 `abacus_charge_reference.cube`。原生 DMR 的 Ionic Step 文件头含自旋及结构信息，会转换为 C++ 接口的 STEP/矩阵维数/R 块数格式，CSR 数值、列索引和行指针保持原样；块数按实际输出统计，因为 ABACUS 会省略空块。旧式 CSR 和 cube 仍使用符号链接。已有参考文件保持原样。若自动识别不到输出，配置中可显式给出 `reference_density_matrix`、`reference_cube` 路径，两者也相对于计算目录解析。
 
 关联原子、轨道、U/J 和等价关系由以下文件明确指定：
 

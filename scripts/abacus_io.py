@@ -26,6 +26,35 @@ def output_directory(dft, parameters):
     return Path(dft) / ('OUT.' + parameters.get('suffix', 'ABACUS'))
 
 
+def prepare_density_reference(source, target):
+    lines = Path(source).read_text().splitlines()
+    if not lines[0].strip().startswith('--- Ionic Step'):
+        Path(target).symlink_to(Path(source).resolve())
+        return
+    def header(label):
+        return int(next(line.split('#')[0].strip() for line in lines if label in line))
+    if header('number of spin directions') != 1 or header('spin index') != 1:
+        raise ValueError('Initial DMR must be non-SOC nspin=1')
+    n_basis = header('number of localized basis')
+    start = next(i for i, line in enumerate(lines) if 'CSR Format' in line)
+    tokens = ' '.join(line.split('#')[0] for line in lines[start:]).split()
+    blocks = []
+    position = 0
+    while position < len(tokens):
+        block_header = tokens[position:position + 4]
+        count = int(block_header[3])
+        position += 4
+        data_size = 2 * count + n_basis + 1 if count else 0
+        data = tokens[position:position + data_size]
+        if len(data) != data_size:
+            raise ValueError('Incomplete initial DMR block')
+        blocks.append(' '.join(block_header) + '\n' + ' '.join(data) + '\n')
+        position += data_size
+    # ABACUS omits empty blocks, despite including them in its header R count.
+    text = f'STEP: 1\nMatrix Dimension: {n_basis}\nMatrix number: {len(blocks)}\n'
+    Path(target).write_text(text + ''.join(blocks))
+
+
 def k_key(k):
     wrapped = np.mod(k, 1.0)
     wrapped[np.isclose(wrapped, 1.0, atol=1e-10, rtol=0)] = 0.0

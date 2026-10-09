@@ -10,10 +10,25 @@ import numpy as np
 
 scripts = Path(__file__).resolve().parent
 sys.path.insert(0, str(scripts))
-from abacus_io import k_mesh, match_k_mesh
+from abacus_io import k_mesh, match_k_mesh, prepare_density_reference
 
 
 class InterfaceTests(unittest.TestCase):
+    def test_native_density_reference(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder)/'native.csr'
+            target = Path(folder)/'reference.csr'
+            source.write_text(' --- Ionic Step 1 ---\n1 # number of spin directions\n'
+                              '1 # spin index\n2 # number of localized basis\n'
+                              '3 # number of Bravais lattice vector R\n'
+                              'user_defined_lattice\n1\n0 0 0\n'
+                              '# CSR Format\n0 0 0 2\n# values\n1.25 -0.5\n'
+                              '# columns\n0 1\n# pointers\n0 1 2\n')
+            prepare_density_reference(source, target)
+            self.assertEqual(target.read_text().splitlines()[:3],
+                             ['STEP: 1', 'Matrix Dimension: 2', 'Matrix number: 1'])
+            self.assertEqual(target.read_text().splitlines()[4], '1.25 -0.5 0 1 0 1 2')
+
     def test_meshes(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder)/'KPT'
