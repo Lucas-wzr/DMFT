@@ -3,6 +3,12 @@
 //    Phys. Rev. B, 2010,81:195107. https://doi.org/10.1103/PhysRevB.81.195107
 //    The energy unit used is eV
 //=================================================================================
+
+//=================================================================================
+//    Bundled CT-HYB matches ru-ccmt/EDMFTF commit
+//    50cdecdc34064a6276b7fae4b7753a2f768fdb46 (2024-03-31),
+//    with local entry-point and MPI lifecycle adaptations
+//=================================================================================
 #pragma once
 
 #include "../para/KS_bands.h"
