@@ -252,7 +252,7 @@ namespace DFT_plus_DMFT
 
     this->imp.sigma.subtract_double_counting(this->flag_axis);
 
-    this->Umat.update_coulomb_tensor(1, this->pars.atom);
+    this->Umat.update_coulomb_tensor(*(int*)this->pars.in.parameter("interaction_type"), this->pars.atom);
 
     this->Mu.update_chemical_potential(
              this->flag_axis, this->pars.bands, 
@@ -642,7 +642,7 @@ namespace DFT_plus_DMFT
             this->pars.in, this->pars.atom, this->Umat );
 
     this->Umat.out_coulomb_tensor(
-            1, charge_step, DMFT_step,
+            *(int*)this->pars.in.parameter("interaction_type"), charge_step, DMFT_step,
             *(int*)this->pars.in.parameter("impurity_solver"),
             this->pars.atom, this->pars.bands );
   }

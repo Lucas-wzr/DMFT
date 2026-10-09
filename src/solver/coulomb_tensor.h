@@ -32,7 +32,7 @@ namespace DMFT
     private:
 
     std::vector<std::vector<std::vector<std::vector<
-    std::vector<double>>>>> U_matrix; //U_matrix[ineq][m1][m2][m3][m4]
+    std::vector<double>>>>> U_matrix; // U[ineq][i][j][k][l], spin orbitals; H_int = 1/2 sum U_ijkl c_i^+ c_j^+ c_k c_l (Hartree)
 
   };
 }

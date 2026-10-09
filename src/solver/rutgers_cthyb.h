@@ -60,15 +60,6 @@ namespace DMFT
         const std::vector<std::vector<std::complex<double>>>& Esplit,
         const std::vector<std::vector<std::vector<std::vector<double>>>>& Utensor);
 
-    int site_occ(int n);
-    double site_Sz(int n, const int nbath);
-    int F_dagger_state(int n, const int ibath, const int nbath);
-    double state_energy(const int n, const int m_tot, const int nspin, 
-            const std::vector<std::vector<std::vector<std::vector<double>>>>& Utensor,
-            const std::vector<std::vector<std::complex<double>>>& Eimp);
-
-    double F_dagger_sign(int n, const int ibath);
-
     //========================interface=========================
     std::vector<std::vector<std::vector<std::complex<double>>>>&
           hopping_term(){return hopping_matrix;}

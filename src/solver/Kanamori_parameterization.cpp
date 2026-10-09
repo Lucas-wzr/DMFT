@@ -9,73 +9,41 @@
 
 namespace DMFT
 {
+  Kanamori_parameterization::tensor Kanamori_parameterization::kanamori(int M, double U, double J, bool full)
+  {
+    const int L = 2*M;
+    tensor result(L, std::vector<std::vector<std::vector<double>>>(L,
+                  std::vector<std::vector<double>>(L, std::vector<double>(L, 0.0))));
+    for(int a=0; a<L; a++)
+      for(int b=0; b<L; b++)
+      {
+        const int m = a % M, n = b % M;
+        const bool same_spin = a/M == b/M;
+        if(a != b) result[a][b][b][a] = m == n ? U : U-(same_spin ? 3.0 : 2.0)*J;
+        if(full && m != n && !same_spin)
+        {
+          // Positive tensor entries give the fermionic spin-flip and pair-hopping signs.
+          result[a][b][(b/M)*M+m][(a/M)*M+n] = J;
+          result[a][(b/M)*M+m][b][(a/M)*M+n] = J;
+        }
+      }
+    return result;
+  }
+
   void Kanamori_parameterization::evaluate_coulomb_tensor(
             DFT_output::atoms_info& atom,
             std::vector<std::vector<std::vector<std::vector<
-            std::vector<double>>>>>& U_matrix)
+            std::vector<double>>>>>& U_matrix, const bool full)
   {
     debug::codestamp("Kanamori_parameterization::evaluate_coulomb_tensor");
 
-    const std::vector<int>& norb_sub = atom.iatom_norb();
-
-    //Allocation
-    if(U_matrix.empty()){
-      U_matrix.resize(atom.inequ_atoms());
-      for(int ineq=0; ineq<atom.inequ_atoms(); ineq++)
-      {
-        const int iatom = atom.ineq_iatom(ineq);
-        const int m_tot = norb_sub[iatom];
-  
-        U_matrix[ineq].resize(2*m_tot);
-        for(int m1=0; m1<2*m_tot; m1++)
-        {
-          U_matrix[ineq][m1].resize(2*m_tot);
-          for(int m2=0; m2<2*m_tot; m2++)
-          {
-            U_matrix[ineq][m1][m2].resize(2*m_tot);
-            for(int m3=0; m3<2*m_tot; m3++)
-            {
-              U_matrix[ineq][m1][m2][m3].resize(2*m_tot,0.0);
-            }
-          }
-        }
-      }
-    }
-
-    //evaluation
+    U_matrix.resize(atom.inequ_atoms());
     for(int ineq=0; ineq<atom.inequ_atoms(); ineq++)
     {
       const int iatom = atom.ineq_iatom(ineq);
-      const int m_tot=norb_sub[iatom];
-      const double U = atom.Uval(iatom);
-      const double J = atom.Jval(iatom);
-
-      int count1 = 0;
-      for(int iorb1=0; iorb1<2*m_tot; iorb1++)
-      {
-        int is1 = iorb1/m_tot;
-        int m1 = iorb1<m_tot ? iorb1 : (iorb1-m_tot);
-
-        for(int iorb2=0; iorb2<2*m_tot; iorb2++)
-        {
-          int is2 = iorb2/m_tot;
-          int m2 = iorb2<m_tot ? iorb2 : (iorb2-m_tot);
-
-          if(is1==is2)
-          {
-            if(m1==m2) U_matrix[ineq][iorb1][iorb2][iorb2][iorb1] = 0.0;
-            else U_matrix[ineq][iorb1][iorb2][iorb2][iorb1] = U-3.0*J;
-          }
-          else
-          {
-            if(m1==m2) U_matrix[ineq][iorb1][iorb2][iorb2][iorb1] = U;
-            else U_matrix[ineq][iorb1][iorb2][iorb2][iorb1] = U-2.0*J;
-          }
-        }
-      }
+      U_matrix[ineq] = kanamori(atom.iatom_norb()[iatom],
+                               atom.Uval(iatom), atom.Jval(iatom), full);
     }
-
-    return;
   }
 
   void Kanamori_parameterization::out_ALPS_CTHYB(

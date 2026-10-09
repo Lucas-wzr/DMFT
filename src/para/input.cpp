@@ -213,6 +213,33 @@ namespace DMFT
     else if(this->flag_impurity_solver==4) GLV::ofs_running << "rutgers-cthyb" << std::endl;
     else if(this->flag_impurity_solver==5) GLV::ofs_running << "iqist" << std::endl;
 
+    //interaction_type
+    this->flag_interaction_type = 1;
+    try {
+      std::vector<std::string> str_val;
+      this->read_parameter("interaction_type", str_val);
+      const std::string value = this->strtolower(str_val[0]);
+      if(value=="density_density") this->flag_interaction_type = 1;
+      else if(value=="kanamori") this->flag_interaction_type = 2;
+      else if(value=="tensor") this->flag_interaction_type = 3;
+      else {
+        std::cerr << "Unsupported interaction_type " << value << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    }
+    catch(const bool not_given) { (void)not_given; }
+    catch(const std::string messg) {
+      std::cerr << messg << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if(this->flag_interaction_type!=1 && this->flag_impurity_solver!=4) {
+      std::cerr << "General interactions currently require rutgers-cthyb" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    GLV::ofs_running << "interaction_type  "
+      << (this->flag_interaction_type==1 ? "density_density" :
+          this->flag_interaction_type==2 ? "kanamori" : "tensor") << std::endl;
+
     //double_counting
     try {
       std::vector<std::string> str_val;
@@ -804,6 +831,7 @@ namespace DMFT
           std::strcmp("temperature", key_str_lower.c_str())==0 ||
           std::strcmp("magnetism", key_str_lower.c_str())==0 ||
           std::strcmp("impurity_solver", key_str_lower.c_str())==0 ||
+          std::strcmp("interaction_type", key_str_lower.c_str())==0 ||
           std::strcmp("double_counting", key_str_lower.c_str())==0 ||
           std::strcmp("max_charge_step", key_str_lower.c_str())==0 ||
           std::strcmp("max_dmft_step", key_str_lower.c_str())==0 ||
@@ -886,6 +914,7 @@ namespace DMFT
     else if(std::strcmp("n_tau", word.c_str())==0) return &n_tau;
     else if(std::strcmp("n_omega", word.c_str())==0) return &n_omega;
     else if(std::strcmp("impurity_solver", word.c_str())==0) return &flag_impurity_solver;
+    else if(std::strcmp("interaction_type", word.c_str())==0) return &flag_interaction_type;
     else if(std::strcmp("double_counting", word.c_str())==0) return &flag_double_counting;
     else if(std::strcmp("max_charge_step", word.c_str())==0) return &charge_step_max;
     else if(std::strcmp("max_dmft_step", word.c_str())==0) return &DMFT_step_max;
@@ -944,6 +973,7 @@ namespace DMFT
     ofs << "temperature" << std::setw(10) << std::setprecision(2) << this->temperature << '\n';
     ofs << "magnetism" << std::setw(5) << this->flag_magnetism << '\n';
     ofs << "impurity_solver" << std::setw(5) << this->flag_impurity_solver << '\n';
+    ofs << "interaction_type" << std::setw(5) << this->flag_interaction_type << '\n';
     ofs << "n_tau" << std::setw(5) << this->n_tau << '\n';
     ofs << "n_omega" << std::setw(5) << this->n_omega << '\n';
     ofs << "double_counting" << std::setw(5) << this->flag_double_counting << std::endl;
