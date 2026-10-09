@@ -186,7 +186,7 @@ bool Charge_SCF_abacus::update(solver& task, int charge_step)
     }
     MPI_Bcast(&status,1,MPI_INT,0,MPI_COMM_WORLD);
     if(status!=0) throw std::runtime_error("ABACUS single-step bridge failed; inspect "+folder);
-    auto rho=read_cube(folder+"/dft/OUT.NiO/chg.cube");
+    auto rho=read_cube(folder+"/charge.cube");
     double squared=0,grid_number=0;
     for(int i=0;i<int(rho.size());i++){
         squared+=std::pow((rho[i]-rho_in[i])/mixing,2);

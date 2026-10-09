@@ -1,32 +1,42 @@
-"""Convert this scalar, nonmagnetic NiO calculation to DMFT-dev."""
+"""Convert non-SOC, nspin=1 ABACUS output to the DMFT-dev interface."""
 from pathlib import Path
 import re
 import json
 import numpy as np
+from abacus_io import input_parameters, lattice_vectors, output_directory, k_mesh, match_k_mesh
 
-root = Path(__file__).resolve().parent
-source = root / 'dft/OUT.NiO'
-target = root / 'dft/outputs_to_DMFT'
+root = Path.cwd()
+dft = root/'dft'
+parameters = input_parameters(dft/'INPUT')
+if int(parameters.get('nspin', '1')) != 1 or parameters.get('lspinorb', '0').lower() in ['1', 'true', 't']:
+    raise ValueError('This interface supports non-SOC nspin=1 calculations')
+if parameters.get('gamma_only', '0').lower() in ['1', 'true', 't']:
+    raise ValueError('Set gamma_only 0 to output the complex k-space wavefunction format')
+source = output_directory(dft, parameters)
+target = dft/'outputs_to_DMFT'
+lattice, lattice_scale = lattice_vectors(dft/parameters.get('stru_file', 'STRU'))
 
 def read_csr(path):
-    with path.open() as f:
-        next(f)  # STEP header is absent in the older DMFT-dev format.
-        n = int(next(f).split()[-1])
-        nr = int(next(f).split()[-1])
-        blocks = []
-        for _ in range(nr):
-            x, y, z, count = map(int, next(f).split())
-            if count == 0:
-                continue
-            values = np.fromstring(next(f), sep=' ')
-            columns = np.fromstring(next(f), sep=' ', dtype=int)
-            pointers = np.fromstring(next(f), sep=' ', dtype=int)
-            assert len(values) == len(columns) == count and len(pointers) == n + 1
-            matrix = np.zeros((n, n))
-            for row in range(n):
-                sl = slice(pointers[row], pointers[row + 1])
-                matrix[row, columns[sl]] = values[sl]
-            blocks.append(((x, y, z), values, columns, pointers, matrix))
+    lines = [line.split('#')[0].strip() for line in path.read_text().splitlines()]
+    lines = [line for line in lines if line]
+    if lines[0].startswith('STEP'):
+        lines = lines[1:]
+    n, nr = int(lines[0].split()[-1]), int(lines[1].split()[-1])
+    tokens = iter(' '.join(lines[2:]).split())
+    blocks = []
+    for _ in range(nr):
+        r = tuple(int(next(tokens)) for _ in range(3))
+        count = int(next(tokens))
+        if count == 0:
+            continue
+        values = np.array([float(next(tokens)) for _ in range(count)])
+        columns = np.array([int(next(tokens)) for _ in range(count)])
+        pointers = np.array([int(next(tokens)) for _ in range(n + 1)])
+        matrix = np.zeros((n, n))
+        for row in range(n):
+            sl = slice(pointers[row], pointers[row + 1])
+            matrix[row, columns[sl]] = values[sl]
+        blocks.append((r, values, columns, pointers, matrix))
     return n, blocks
 
 # ABACUS develop renamed these output files; numerical formats are unchanged.
@@ -45,13 +55,19 @@ else:
     fermi = float(re.findall(r'EFERMI\s*=\s*([-+\d.eE]+)', log)[-1]) / 27.211386245
 lines = (source / ('KPT.info' if modern_output else 'kpoints')).read_text().splitlines()
 nk = int(lines[0].split()[-1])
-assert nk == 666 and n == 40
-# The printed weights/coordinates are rounded. Recover exact 11^3 mesh data.
-kpoints = np.array([list(map(float, line.split()[1:4])) for line in lines[3:3 + nk]])
-kpoints = np.rint(kpoints * 11) / 11
-weights = np.where(np.linalg.norm(kpoints, axis=1) == 0, 1, 2) / 1331
-assert abs(weights.sum() - 1) < 1e-12
-assert len(list(source.glob(wfc_name.format('*')))) == nk
+printed_kpoints = np.array([list(map(float, line.split()[1:4])) for line in lines[3:3 + nk]])
+# Recover precise coordinates from the wavefunction headers, and exact weights
+# from the input integration mesh rather than rounded KPT.info weights.
+kpoints = []
+for ik in range(nk):
+    with (source/wfc_name.format(ik + 1)).open() as f:
+        assert int(next(f).split()[0]) == ik + 1
+        kpoints.append(lattice @ np.fromstring(next(f), sep=' '))
+kpoints = np.array(kpoints)
+difference = kpoints - printed_kpoints
+assert np.max(np.abs(difference - np.rint(difference))) < 1e-7
+full_points, full_weights = k_mesh(dft/parameters.get('kpoint_file', 'KPT'), lattice)
+kpoints, weights = match_k_mesh(kpoints, full_points, full_weights)
 (target / 'KS_eigenvector').mkdir(parents=True, exist_ok=True)
 (target / 'overlap_matrix').mkdir(exist_ok=True)
 
@@ -70,11 +86,11 @@ with (target / 'k_weight.dat').open('w') as f:
     for ik, weight in enumerate(weights):
         f.write(f'{ik} {weight:.16g}\n')
 
-# ABACUS real harmonics: m = 0,+1,-1,+2,-2; first Ni d radial function.
-# DMFT-dev expects real harmonics ordered m = -2,-1,0,+1,+2.
-(target / 'symmetry.dat').write_text('1\n1\n0 0\n')
-(target / 'correlated_atoms.info').write_text(
-    'atom 0\nangular_moment 2\n8.0 1.0 0\n-2 14\n-1 12\n0 10\n1 11\n2 13\n')
+# Correlated atoms and harmonics are selected by the user, not inferred from species.
+for name in ['correlated_atoms.info', 'symmetry.dat']:
+    path = target/name
+    if not path.exists():
+        raise FileNotFoundError(f'Provide {path} before conversion')
 
 max_norm = 0.0
 max_residual = 0.0
@@ -85,10 +101,13 @@ for ik, k in enumerate(kpoints):
         assert int(next(f).split()[0]) == ik + 1
         cart = np.fromstring(next(f), sep=' ')
         # WFC coordinates are Cartesian in reciprocal units, not direct.
-        lattice = np.array([[2.0890, 2.0890, 0], [0, 2.0890, 2.0890], [2.0890, 0, 2.0890]])
-        assert np.max(np.abs(lattice @ cart - k)) < 1e-7
+        difference = lattice @ cart - k
+        assert np.max(np.abs(difference - np.rint(difference))) < 1e-7
         nb = int(next(f).split()[0])
-        assert int(next(f).split()[0]) == n and nb == 40
+        assert int(next(f).split()[0]) == n
+        if ik == 0:
+            nband = nb
+        assert nb == nband
         energies, occs, coefficients = [], [], []
         for ib in range(nb):
             assert int(next(f).split()[0]) == ib + 1
@@ -115,13 +134,21 @@ for ik, k in enumerate(kpoints):
                 f.write(f'0 {ib} {j} {c[j, ib].real:.16g} {c[j, ib].imag:.16g}\n')
 
 assert max_norm < 1e-5, max_norm
-# This case's residual is diagnostic only, as requested for the DMFT smoke test.
+# The bridge applies the KS residual stop threshold; retain the diagnostic here.
 if max_residual >= 1e-5:
     print(f'Warning: max HC-SCe residual = {max_residual:.8g} Ry; continuing DMFT conversion', flush=True)
-assert abs(electrons - 24) < 1e-6, electrons
-(target / 'bands.dat').write_text(f'0\n24 1 {nb} {nk} {fermi:.16g}\n' + ''.join(band_lines))
+if float(parameters.get('nelec', '-1')) > 0:
+    target_electrons = float(parameters['nelec'])
+else:
+    matches = re.findall(r'(?:AUTOSET number of electrons|number of electrons|NELEC)\s*(?:[:=]\s*)*([-+\d.eE]+)', log, re.I)
+    if not matches:
+        raise ValueError('Cannot find target electron number; set nelec in INPUT')
+    target_electrons = float(matches[-1])
+assert abs(electrons - target_electrons) < 1e-6, electrons
+(target / 'bands.dat').write_text(f'0\n{target_electrons:.16g} 1 {nb} {nk} {fermi:.16g}\n' + ''.join(band_lines))
 report = dict(kpoints=nk, bands=nb, basis=n, electrons=electrons,
               max_CdaggerSC_error=max_norm, max_HC_minus_SCepsilon_Ry=max_residual,
-              fermi_Hartree=fermi, correlated_Ni_d_indices=[14, 12, 10, 11, 13])
+              fermi_Hartree=fermi, target_electrons=target_electrons,
+              cell_volume_bohr3=float(abs(np.linalg.det(lattice * lattice_scale))))
 (root / 'conversion_report.json').write_text(json.dumps(report, indent=2) + '\n')
 print(json.dumps(report, indent=2))
