@@ -221,7 +221,8 @@ namespace DMFT
       const std::string value = this->strtolower(str_val[0]);
       if(value=="density_density") this->flag_interaction_type = 1;
       else if(value=="kanamori") this->flag_interaction_type = 2;
-      else if(value=="tensor") this->flag_interaction_type = 3;
+      else if(value=="slater_condon") this->flag_interaction_type = 3;
+      else if(value=="tensor") this->flag_interaction_type = 4;
       else {
         std::cerr << "Unsupported interaction_type " << value << std::endl;
         std::exit(EXIT_FAILURE);
@@ -238,7 +239,8 @@ namespace DMFT
     }
     GLV::ofs_running << "interaction_type  "
       << (this->flag_interaction_type==1 ? "density_density" :
-          this->flag_interaction_type==2 ? "kanamori" : "tensor") << std::endl;
+          this->flag_interaction_type==2 ? "kanamori" :
+          this->flag_interaction_type==3 ? "slater_condon" : "tensor") << std::endl;
 
     //double_counting
     try {

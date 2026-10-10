@@ -68,6 +68,7 @@
 - **Values**:
   - *density_density*: the existing static density-density interaction using per-atom U and J.
   - *kanamori*: full static Kanamori, including spin-flip and pair-hopping; requires Rutgers.
+  - *slater_condon*: p/d/f-shell Slater integrals from optional `Slater_integrals_impurityN.dat` (eV), otherwise generated from shell-averaged U,J with TRIQS default ratios; requires Rutgers. See [basis, input and validation](../temp_docs/slater_condon.md).
   - *tensor*: real static spin-orbital tensor from `Uijkl_impurityN.dat` in the calculation root; requires Rutgers.
 - **Convention**: `H_int = 1/2 sum U_ijkl c_i^dagger c_j^dagger c_k c_l`. File entries are zero-based `i j k l value_eV`, with all up-spin orbitals before all down-spin orbitals.
 - **Scope**: conserved Sz, no SOC, and the current diagonal bath/self-energy interface. See [tensor conventions, limitations and validation](../temp_docs/rutgers_general_interaction.md).

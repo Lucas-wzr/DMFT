@@ -37,7 +37,7 @@ namespace DMFT
     //ALPS-CTHYB:1;  LPS-CTHYB-SEGMENT:2; (not supported now)
     //PACS:3;  Rutgers-CTHYB:4; iQIST:5; default:4
     int flag_impurity_solver;    
-    int flag_interaction_type;        // density_density:1, kanamori:2, tensor:3; default:1
+    int flag_interaction_type;        // density_density:1, kanamori:2, slater_condon:3, tensor:4; default:1
     int flag_double_counting;       //fll:1, nominal:2, arbitrary:3;   default:1
     double nf;                      //number of correlated electrons used in the double countings; default:1.0
     int charge_step_max;            //number of the maximum charge self-consistent interation loop; default:1
