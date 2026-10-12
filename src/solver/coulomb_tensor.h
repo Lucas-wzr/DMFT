@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Kanamori_parameterization.h"
 #include "../para/correlated_atoms.h"
 #include "../para/KS_bands.h"
 
@@ -8,13 +7,15 @@
 
 namespace DMFT
 {
+    // H_int = 1/2 sum U[i][j][k][l] c_i^+ c_j^+ c_k c_l, in Hartree.
+    // Spin orbitals: all up orbitals followed by all down orbitals.
+    using interaction_tensor = std::vector<std::vector<std::vector<std::vector<double>>>>;
+
   class coulomb_tensor
   {
     public:
     coulomb_tensor(){};
     ~coulomb_tensor(){};
-
-    Kanamori_para Kana_coulomb;
 
     void update_coulomb_tensor(const int type, DFT_output::atoms_info& atom);
 
@@ -26,13 +27,11 @@ namespace DMFT
               DFT_output::atoms_info& atom,
               DFT_output::KS_bands& band );
 
-    std::vector<std::vector<std::vector<std::vector<
-    std::vector<double>>>>>& Coulomb_matrix(){return U_matrix;}
+    std::vector<interaction_tensor>& Coulomb_matrix(){return U_matrix;}
 
     private:
 
-    std::vector<std::vector<std::vector<std::vector<
-    std::vector<double>>>>> U_matrix; // U[ineq][i][j][k][l], spin orbitals; H_int = 1/2 sum U_ijkl c_i^+ c_j^+ c_k c_l (Hartree)
+    std::vector<interaction_tensor> U_matrix; // U[ineq][i][j][k][l], in Hartree
 
   };
 }

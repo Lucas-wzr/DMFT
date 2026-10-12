@@ -35,7 +35,7 @@ namespace DMFT
     int n_tau;                      //number of segments on the interval [0,beta] when using CTQMC impuroty solver;default:500
     int n_omega;                    //number of Matsubara frequency points
     //ALPS-CTHYB:1;  LPS-CTHYB-SEGMENT:2; (not supported now)
-    //PACS:3;  Rutgers-CTHYB:4; iQIST:5; default:4
+    //PACS:3; Rutgers-CTHYB:4; iQIST:5; ComCTQMC:6; default:4
     int flag_impurity_solver;    
     int flag_interaction_type;        // density_density:1, kanamori:2, slater_condon:3, tensor:4; default:1
     int flag_double_counting;       //fll:1, nominal:2, arbitrary:3;   default:1
@@ -45,6 +45,9 @@ namespace DMFT
     int DMFT_step_first;            //number of the maximum DMFT interation step under the first charge loop; default:DMFT_step_max
     int DFT_step_max;               //number of the maximum DFT interation step under each charge loop; default:1
     long long MC_step;              //numuber of MC sampling steps; default:1000
+    int comctqmc_nproc;              //0: use allocated physical cores on the launching node
+    long long warmup;               //warmup updates per chain; currently used only by ComCTQMC
+    std::string comctqmc_exe, comctqmc_evalsim, comctqmc_launcher;
     std::vector<double> proj_window;  //Energy window for hybridization function; default proj_window[0]=-5.0, proj_window[1]=5.0;
     std::vector<double> DOS_window;   //Energy window for DOS; default proj_window[0]=proj_window[0], proj_window[1]=proj_window[1];
     bool hyb_func;                  //Whether hybrid functional is used or not; default:false

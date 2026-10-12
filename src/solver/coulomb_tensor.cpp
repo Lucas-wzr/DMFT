@@ -1,4 +1,5 @@
 #include "coulomb_tensor.h"
+#include "Kanamori_parameterization.h"
 
 #include "../debug.h"
 #include "../constants.h"
@@ -20,7 +21,7 @@ namespace DMFT
     {
       if(type==1 || type==2)
       {
-        this->Kana_coulomb.evaluate_coulomb_tensor(atom, this->U_matrix, type==2);
+        Kanamori_para().evaluate_coulomb_tensor(atom, this->U_matrix, type==2);
         return;
       }
       this->U_matrix.resize(atom.inequ_atoms());
@@ -71,9 +72,9 @@ namespace DMFT
     {
       case 1:
         if(impurity_solver==1)
-          this->Kana_coulomb.out_ALPS_CTHYB(char_step, DMFT_step, atom, band);
+          Kanamori_para().out_ALPS_CTHYB(char_step, DMFT_step, atom, band);
         else if(impurity_solver==2)
-          this->Kana_coulomb.out_ALPS_CTHYB_SEGMENT(char_step, DMFT_step, atom, band);
+          Kanamori_para().out_ALPS_CTHYB_SEGMENT(char_step, DMFT_step, atom, band);
         break;
       default:
         break;

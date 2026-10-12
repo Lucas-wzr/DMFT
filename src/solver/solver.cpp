@@ -335,6 +335,9 @@ namespace DFT_plus_DMFT
       case 5: 
         this->imp.iQIST_narcissus.impurities_solving(char_step, DMFT_step, atom);
         break;
+      case 6:
+        this->imp.comctqmc.impurities_solving(char_step, DMFT_step, atom);
+        break;
       default:
         std::cerr << "Not supported impurity solver" << std::endl;
         std::exit(EXIT_FAILURE);
@@ -360,7 +363,8 @@ namespace DFT_plus_DMFT
          impurity_solver==2 || 
          impurity_solver==3 ||
          impurity_solver==4 ||
-         impurity_solver==5 )
+         impurity_solver==5 ||
+         impurity_solver==6 )
          this->flag_axis = 0;       //imaginary axis
       else this->flag_axis = 1;     //real axis
 

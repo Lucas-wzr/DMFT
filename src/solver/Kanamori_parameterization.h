@@ -3,6 +3,7 @@
 //======================================================================
 #pragma once
 
+#include "coulomb_tensor.h"
 #include "../para/correlated_atoms.h"
 #include "../para/KS_bands.h"
 
@@ -16,10 +17,7 @@ namespace DMFT
     Kanamori_parameterization(){};
     ~Kanamori_parameterization(){};
 
-    // H_int = 1/2 sum U_ijkl c_i^+ c_j^+ c_k c_l, in Hartree.
-    // Spin orbitals: all up orbitals followed by all down orbitals.
-    typedef std::vector<std::vector<std::vector<std::vector<double>>>> tensor;
-    static tensor kanamori(int M, double U, double J, bool full);
+    static interaction_tensor kanamori(int M, double U, double J, bool full);
 
     void evaluate_coulomb_tensor(
           DFT_output::atoms_info& atom,

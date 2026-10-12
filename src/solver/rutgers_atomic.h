@@ -1,5 +1,6 @@
 #pragma once
 
+#include "coulomb_tensor.h"
 #include <iosfwd>
 #include <vector>
 
@@ -7,10 +8,6 @@ namespace DMFT
 {
   namespace rutgers_atomic
   {
-    // H_int = 1/2 sum U[i][j][k][l] c_i^+ c_j^+ c_k c_l, in Hartree.
-    // Spin orbitals: all up orbitals followed by all down orbitals.
-    typedef std::vector<std::vector<std::vector<std::vector<double>>>> tensor;
-
     struct block
     {
       std::vector<int> states;
@@ -22,9 +19,9 @@ namespace DMFT
       double Sz;
     };
 
-    tensor read_tensor(std::istream& input, int M, double energy_unit);
-    std::vector<block> solve(const std::vector<double>& levels, const tensor& U);
+    interaction_tensor read_tensor(std::istream& input, int M, double energy_unit);
+    std::vector<block> solve(const std::vector<double>& levels, const interaction_tensor& U);
     void write_cix(std::ostream& output, const std::vector<double>& levels,
-                   const tensor& U, const std::vector<block>& blocks, double energy_unit);
+                   const interaction_tensor& U, const std::vector<block>& blocks, double energy_unit);
   }
 }

@@ -56,10 +56,10 @@ namespace DMFT
       }
     }
 
-    tensor read_tensor(std::istream& input, int M, double energy_unit)
+    interaction_tensor read_tensor(std::istream& input, int M, double energy_unit)
     {
       const int L = 2*M;
-      tensor U(L, std::vector<std::vector<std::vector<double>>>(L,
+      interaction_tensor U(L, std::vector<std::vector<std::vector<double>>>(L,
                std::vector<std::vector<double>>(L, std::vector<double>(L, 0.0))));
       std::set<std::vector<int>> entries;
       std::string line;
@@ -86,7 +86,7 @@ namespace DMFT
       return U;
     }
 
-    std::vector<block> solve(const std::vector<double>& levels, const tensor& U)
+    std::vector<block> solve(const std::vector<double>& levels, const interaction_tensor& U)
     {
       const int L = levels.size(), M = L/2;
       if(L<2 || L%2 || L>14)
@@ -269,7 +269,7 @@ namespace DMFT
     }
 
     void write_cix(std::ostream& out, const std::vector<double>& levels,
-                   const tensor& U, const std::vector<block>& blocks, double energy_unit)
+                   const interaction_tensor& U, const std::vector<block>& blocks, double energy_unit)
     {
       const int L = levels.size(), M = L/2;
       int max_size = 1;

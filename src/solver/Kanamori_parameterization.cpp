@@ -9,10 +9,10 @@
 
 namespace DMFT
 {
-  Kanamori_parameterization::tensor Kanamori_parameterization::kanamori(int M, double U, double J, bool full)
+  interaction_tensor Kanamori_parameterization::kanamori(int M, double U, double J, bool full)
   {
     const int L = 2*M;
-    tensor result(L, std::vector<std::vector<std::vector<double>>>(L,
+    interaction_tensor result(L, std::vector<std::vector<std::vector<double>>>(L,
                   std::vector<std::vector<double>>(L, std::vector<double>(L, 0.0))));
     for(int a=0; a<L; a++)
       for(int b=0; b<L; b++)

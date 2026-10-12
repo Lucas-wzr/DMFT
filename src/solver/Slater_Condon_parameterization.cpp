@@ -98,7 +98,7 @@ namespace DMFT
       return F;
     }
 
-    rutgers_atomic::tensor evaluate(int l,const std::vector<double>& F,
+    interaction_tensor evaluate(int l,const std::vector<double>& F,
                                    const std::vector<int>& orbitals)
     {
       if(orbitals.empty())
@@ -138,7 +138,7 @@ namespace DMFT
             C[k][q+k][a*M+c]+=std::conj(T[a][m+l])*T[c][n+l]
               *phase(m)*double(2*l+1)*three_j(l,k,l,0,0,0)*three_j(l,k,l,-m,q,n);
       }
-      auto U=rutgers_atomic::tensor(L,std::vector<std::vector<std::vector<double>>>(L,
+      auto U=interaction_tensor(L,std::vector<std::vector<std::vector<double>>>(L,
         std::vector<std::vector<double>>(L,std::vector<double>(L,0.0))));
       for(int a=0;a<M;a++) for(int b=0;b<M;b++)
         for(int c=0;c<M;c++) for(int d=0;d<M;d++)

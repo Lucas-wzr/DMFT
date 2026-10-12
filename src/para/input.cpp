@@ -12,6 +12,7 @@
 #include <cerrno>
 #include <cmath>
 #include <string>
+#include <stdexcept>
 
 namespace
 {
@@ -192,6 +193,8 @@ namespace DMFT
         this->flag_impurity_solver = 4;
       else if(std::strcmp("iqist",this->strtolower(str_val[0]).c_str())==0)
         this->flag_impurity_solver = 5;
+      else if(this->strtolower(str_val[0])=="comctqmc")
+        this->flag_impurity_solver = 6;
       else
       {
         std::cerr << "unsupported value of impurity_solver " << this->strtolower(str_val[0]) << std::endl;
@@ -212,6 +215,7 @@ namespace DMFT
     else if(this->flag_impurity_solver==3) GLV::ofs_running << "pacs" << std::endl;
     else if(this->flag_impurity_solver==4) GLV::ofs_running << "rutgers-cthyb" << std::endl;
     else if(this->flag_impurity_solver==5) GLV::ofs_running << "iqist" << std::endl;
+    else if(this->flag_impurity_solver==6) GLV::ofs_running << "comctqmc" << std::endl;
 
     //interaction_type
     this->flag_interaction_type = 1;
@@ -233,8 +237,8 @@ namespace DMFT
       std::cerr << messg << std::endl;
       std::exit(EXIT_FAILURE);
     }
-    if(this->flag_interaction_type!=1 && this->flag_impurity_solver!=4) {
-      std::cerr << "General interactions currently require rutgers-cthyb" << std::endl;
+    if(this->flag_interaction_type!=1 && this->flag_impurity_solver!=4 && this->flag_impurity_solver!=6) {
+      std::cerr << "General interactions require rutgers-cthyb or comctqmc" << std::endl;
       std::exit(EXIT_FAILURE);
     }
     GLV::ofs_running << "interaction_type  "
@@ -507,7 +511,7 @@ namespace DMFT
       std::vector<std::string> str_val;
       this->read_parameter("mc_step", str_val);
 
-      this->MC_step = atoi(str_val[0].c_str());
+      this->MC_step = std::atoll(str_val[0].c_str());
     }
     catch (const std::string messg) {
       std::cerr << messg << std::endl;
@@ -518,6 +522,44 @@ namespace DMFT
       this->MC_step = 5000000;
     }
     GLV::ofs_running << "mc_step  " << this->MC_step << std::endl;
+
+    this->comctqmc_nproc = 0;
+    this->warmup = 100000;
+    this->comctqmc_exe = "CTQMC";
+    this->comctqmc_evalsim = "EVALSIM";
+    this->comctqmc_launcher = "comctqmc-launch";
+    if(this->flag_impurity_solver==6)
+    {
+      try {
+        for(const std::string key : {"comctqmc_nproc", "warmup",
+              "comctqmc_exe", "comctqmc_evalsim", "comctqmc_launcher"})
+        {
+          std::vector<std::string> value;
+          try { this->read_parameter(const_cast<char*>(key.c_str()), value); }
+          catch(const bool not_given) { continue; }
+          if(key=="comctqmc_nproc") this->comctqmc_nproc = std::stoi(value[0]);
+          else if(key=="warmup") this->warmup = std::stoll(value[0]);
+          else if(key=="comctqmc_exe") this->comctqmc_exe = value[0];
+          else if(key=="comctqmc_evalsim") this->comctqmc_evalsim = value[0];
+          else this->comctqmc_launcher = value[0];
+        }
+        if(this->comctqmc_nproc<0 || this->warmup<0 || this->MC_step<=0)
+          throw std::runtime_error("Invalid ComCTQMC sampling controls");
+      }
+      catch(const std::string& message) {
+        std::cerr << message << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      catch(const std::exception& error) {
+        std::cerr << error.what() << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      GLV::ofs_running << "comctqmc_nproc  " << this->comctqmc_nproc << '\n'
+        << "warmup  " << this->warmup << '\n'
+        << "comctqmc_exe  " << this->comctqmc_exe << '\n'
+        << "comctqmc_evalsim  " << this->comctqmc_evalsim << '\n'
+        << "comctqmc_launcher  " << this->comctqmc_launcher << std::endl;
+    }
 
     int local_symmetry_tmp;
     try {
@@ -834,6 +876,11 @@ namespace DMFT
           std::strcmp("magnetism", key_str_lower.c_str())==0 ||
           std::strcmp("impurity_solver", key_str_lower.c_str())==0 ||
           std::strcmp("interaction_type", key_str_lower.c_str())==0 ||
+          key_str_lower=="comctqmc_nproc" ||
+          key_str_lower=="warmup" ||
+          key_str_lower=="comctqmc_exe" ||
+          key_str_lower=="comctqmc_evalsim" ||
+          key_str_lower=="comctqmc_launcher" ||
           std::strcmp("double_counting", key_str_lower.c_str())==0 ||
           std::strcmp("max_charge_step", key_str_lower.c_str())==0 ||
           std::strcmp("max_dmft_step", key_str_lower.c_str())==0 ||
@@ -917,6 +964,11 @@ namespace DMFT
     else if(std::strcmp("n_omega", word.c_str())==0) return &n_omega;
     else if(std::strcmp("impurity_solver", word.c_str())==0) return &flag_impurity_solver;
     else if(std::strcmp("interaction_type", word.c_str())==0) return &flag_interaction_type;
+    else if(word=="comctqmc_nproc") return &comctqmc_nproc;
+    else if(word=="warmup") return &warmup;
+    else if(word=="comctqmc_exe") return &comctqmc_exe;
+    else if(word=="comctqmc_evalsim") return &comctqmc_evalsim;
+    else if(word=="comctqmc_launcher") return &comctqmc_launcher;
     else if(std::strcmp("double_counting", word.c_str())==0) return &flag_double_counting;
     else if(std::strcmp("max_charge_step", word.c_str())==0) return &charge_step_max;
     else if(std::strcmp("max_dmft_step", word.c_str())==0) return &DMFT_step_max;

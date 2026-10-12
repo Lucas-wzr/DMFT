@@ -442,6 +442,7 @@ alps_cthyb.o \\
 alps_cthyb_segment.o \\
 rutgers_cthyb.o \\
 rutgers_atomic.o \\
+comctqmc.o \\
 Slater_Condon_parameterization.o \\
 iQIST_narcissus.o \\
 math_zone.o \\
@@ -525,6 +526,7 @@ alps_cthyb.o \\
 alps_cthyb_segment.o \\
 rutgers_cthyb.o \\
 rutgers_atomic.o \\
+comctqmc.o \\
 Slater_Condon_parameterization.o \\
 iQIST_narcissus.o \\
 math_zone.o \\
