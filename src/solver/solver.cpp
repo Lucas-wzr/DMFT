@@ -289,7 +289,7 @@ namespace DFT_plus_DMFT
 
     this->imp.sigma.subtract_double_counting(this->flag_axis);
 
-    this->Umat.update_coulomb_tensor(1, this->pars.atom);
+    this->Umat.update_coulomb_tensor(*(int*)this->pars.in.parameter("interaction_type"), this->pars.atom);
 
     this->Mu.update_chemical_potential(
              this->flag_axis, this->pars.bands, 
@@ -372,6 +372,9 @@ namespace DFT_plus_DMFT
       case 5: 
         this->imp.iQIST_narcissus.impurities_solving(char_step, DMFT_step, atom);
         break;
+      case 6:
+        this->imp.comctqmc.impurities_solving(char_step, DMFT_step, atom);
+        break;
       default:
         std::cerr << "Not supported impurity solver" << std::endl;
         std::exit(EXIT_FAILURE);
@@ -397,7 +400,8 @@ namespace DFT_plus_DMFT
          impurity_solver==2 || 
          impurity_solver==3 ||
          impurity_solver==4 ||
-         impurity_solver==5 )
+         impurity_solver==5 ||
+         impurity_solver==6 )
          this->flag_axis = 0;       //imaginary axis
       else this->flag_axis = 1;     //real axis
 
@@ -681,7 +685,7 @@ namespace DFT_plus_DMFT
             this->pars.in, this->pars.atom, this->Umat );
 
     this->Umat.out_coulomb_tensor(
-            1, charge_step, DMFT_step,
+            *(int*)this->pars.in.parameter("interaction_type"), charge_step, DMFT_step,
             *(int*)this->pars.in.parameter("impurity_solver"),
             this->pars.atom, this->pars.bands );
   }

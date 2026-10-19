@@ -632,6 +632,16 @@ namespace DMFT
               mu, in, atom, band, this->sigma.sigma_imag.Matsubara_freq(), 
               this->impurity_level, this->hyb_omega, Umat );
         break;
+      case 6:
+        try {
+          this->comctqmc.output(char_step, DMFT_step, mu, in, atom, band,
+                this->impurity_level, this->hyb_omega, Umat);
+        }
+        catch(const std::exception& error) {
+          std::cerr << "ComCTQMC input: " << error.what() << std::endl;
+          MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+        }
+        break;
       default:
         std::cerr << "Not supported impurity solver" << std::endl;
         std::exit(EXIT_FAILURE);
@@ -659,7 +669,8 @@ namespace DMFT
        impurity_solver==2 || 
        impurity_solver==3 ||
        impurity_solver==4 ||
-       impurity_solver==5 )
+       impurity_solver==5 ||
+       impurity_solver==6 )
        axis_flag = 0;       //imaginary axis
     else axis_flag = 1;     //real axis
 
@@ -744,6 +755,10 @@ namespace DMFT
         this->iQIST_narcissus.read_self_energy(
                 char_step, DMFT_step,
                 band, in, atom, sigma_new);
+        break;
+      case 6:
+        this->comctqmc.read_self_energy(char_step, DMFT_step, band, in, atom,
+                sigma_new);
         break;
       default:
         std::cerr << "Not supported impurity solver" << std::endl;
