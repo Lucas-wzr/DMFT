@@ -3,44 +3,44 @@
 #============Parsing install.var=======
 #============Compilers===============
 CXX=`grep "CXX" install.vars | grep -v "MPI_CXX" | awk '{sub(/^[ \t]+/,"");print $3}'`        #C++ compiler
-if [ -z CXX ];then
+if [ -z "$CXX" ];then
   echo "ERROR: CXX compiler is not specified" 
   exit
 fi
 
 CC=`grep "CC" install.vars | grep -v "MPI_CC" | awk '{sub(/^[ \t]+/,"");print $3}'`           #C complier
-if [ -z CC ];then
+if [ -z "$CC" ];then
   echo "ERROR: CC compiler is not specified" 
   exit
 fi
 
 FC=`grep "FC" install.vars | grep -v "MPI_FC" | awk '{sub(/^[ \t]+/,"");print $3}'`           #Fortran compiler
-if [ -z FC ];then
+if [ -z "$FC" ];then
   echo "ERROR: FC compiler is not specified" 
   exit
 fi
 
 MPI_FC=`grep "MPI_FC" install.vars | awk '{sub(/^[ \t]+/,"");print $3}'`                      #MPI version fortran compiler
-if [ -z MPI_FC ];then
+if [ -z "$MPI_FC" ];then
   echo "ERROR: MPI_FC compiler is not specified" 
   exit
 fi
 
 MPI_CXX=`grep "MPI_CXX" install.vars | awk '{sub(/^[ \t]+/,"");print $3}'`                    #MPI version C++ compiler
-if [ -z MPI_CXX ];then
+if [ -z "$MPI_CXX" ];then
   echo "ERROR: MPI_CXX compiler is not specified" 
   exit
 fi
 
 MPI_CC=`grep "MPI_CC" install.vars | awk '{sub(/^[ \t]+/,"");print $3}'`                      #MPI version C compiler
-if [ -z MPI_CC ];then
+if [ -z "$MPI_CC" ];then
   echo "ERROR: MPI_CC compiler is not specified" 
   exit
 fi
 
 #============DFT softwares path=========
 FHIaims_lib_path_tmp=`grep "FHIaims_lib_path" install.vars | awk '{sub(/^[ \t]+/,"");print $3}'`
-if [ ${FHIaims_lib_path_tmp: -1} = '/' ];then
+if [ -n "$FHIaims_lib_path_tmp" ] && [ "${FHIaims_lib_path_tmp: -1}" = '/' ];then
   FHIaims_lib_path=${FHIaims_lib_path_tmp: 0:-1}
 else
   FHIaims_lib_path=$FHIaims_lib_path_tmp
@@ -298,7 +298,7 @@ if [ ! -f libgsl.la ];then
 
   if [ $? -eq 0 ]
   then
-    make -j
+    make -j2
     if [ $? -eq 0 ]
     then
       make install
@@ -383,16 +383,18 @@ cd $root_dir/build
 # if [ ! -f ../bin/DFTDMFT ]
 if [ ! -f DFTDMFT ]
 then
-  if [ -z $ABACUS_lib_path ];then
+  if [ -z "$ABACUS_lib_path" ];then
     MACRO_ABACUS=
   else
     MACRO_ABACUS=-D__ABACUS
   fi
 
-  if [ -z $FHIaims_lib_path ];then    #FHI-aims has not been built
+  if [ -z "$FHIaims_lib_path" ];then    #FHI-aims has not been built
 cat > Makefile <<EOF
 CPLUSPLUS_MPI = $MPI_CXX
+LINKER = $MPI_FC -nofor-main -cxxlib
 OPTIONS = -g -O3 -std=c++14
+LINK_OPTIONS = -g -O3
 MACRO = $MACRO_ABACUS
 INCLUDES = -I\${MKLROOT}/include
 LIB_MKL = -L\${MKLROOT}/lib/intel64 -lmkl_intel_lp64 -lmkl_sequential -lmkl_core
@@ -451,7 +453,7 @@ charge_scf_aims.o
 #   Target
 #====================
 all:\${OBJS}
-	\${CPLUSPLUS_MPI} \${OPTIONS} \${OBJS} \${LIBRARY} -o ../bin/DFTDMFT
+	\${LINKER} \${LINK_OPTIONS} \${OBJS} \${LIBRARY} -o ../bin/DFTDMFT
 
 .PHONY:clean
 clean:
@@ -468,7 +470,9 @@ EOF
   else #FHI-aims has been built
   cat > Makefile <<EOF
 CPLUSPLUS_MPI = $MPI_CXX
+LINKER = $MPI_FC -nofor-main -cxxlib
 OPTIONS = -g -O3 -std=c++14
+LINK_OPTIONS = -g -O3
 MACRO = -D__FHIaims $MACRO_ABACUS
 INCLUDES = -I\${MKLROOT}/include -I${FHIaims_lib_path}/include
 
@@ -532,7 +536,7 @@ charge_scf_aims.o
 #   Target
 #====================
 all:\${OBJS}
-	\${CPLUSPLUS_MPI} \${OPTIONS} \${OBJS} \${LIBRARY} -o ../bin/DFTDMFT
+	\${LINKER} \${LINK_OPTIONS} \${OBJS} \${LIBRARY} -o ../bin/DFTDMFT
 
 .PHONY:clean
 clean:
@@ -547,7 +551,7 @@ clean:
 	\${CPLUSPLUS_MPI} \${OPTIONS} \${INCLUDES} -c \${MACRO} \$< -o \$@
 EOF
   fi
-  make -j
+  make -j2
 fi
 
 cd $root_dir/build

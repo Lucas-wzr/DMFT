@@ -41,7 +41,6 @@ namespace DMFT
     double nf;                      //number of correlated electrons used in the double countings; default:1.0
     int charge_step_max;            //number of the maximum charge self-consistent interation loop; default:1
     int DMFT_step_max;              //number of the maximum DMFT interation step under each charge loop; default:1
-    int DMFT_step_first;            //number of the maximum DMFT interation step under the first charge loop; default:DMFT_step_max
     int DFT_step_max;               //number of the maximum DFT interation step under each charge loop; default:1
     long long MC_step;              //numuber of MC sampling steps; default:1000
     std::vector<double> proj_window;  //Energy window for hybridization function; default proj_window[0]=-5.0, proj_window[1]=5.0;

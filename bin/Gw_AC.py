@@ -4,7 +4,7 @@ from scipy import integrate, interpolate, optimize
 import os, sys, shutil
 from mpi4py import MPI
 
-maxent_exe="/home/quxin/softwares/DFT_plus_DMFT/bin/maxent"
+maxent_exe="/data/home/df_iopcas_wuzirui/apps/DMFT-dev/bin/maxent"
 
 def Broad(width, om, fw):
     '''

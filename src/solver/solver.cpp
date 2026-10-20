@@ -69,8 +69,6 @@ namespace DFT_plus_DMFT
     bool sigma_convergency = false;
     int last_char_step = *(int*)this->pars.in.parameter("last_charge_step");
     int last_DMFT_step = *(int*)this->pars.in.parameter("last_dmft_step");
-    const int max_DMFT_step = *(int*)this->pars.in.parameter("max_dmft_step");
-    const int DMFT_step_first = *(int*)this->pars.in.parameter("dmft_step_first");
 
     GLV::ofs_running << "================ Begin DFT+DMFT scf loop ================" << std::endl;
     //===============================================
@@ -128,9 +126,8 @@ namespace DFT_plus_DMFT
       //=============================================================
       //            DMFT loop
       //=============================================================
-      const int max_dmft_step_current = (charge_loop_count>1 ? max_DMFT_step : DMFT_step_first);
       for(int dmft_step = (charge_loop_count>1? 1 : *(int*)this->pars.in.parameter("start_dmft_step"));
-          dmft_step <= max_dmft_step_current; dmft_step++)
+          dmft_step <= *(int*)this->pars.in.parameter("max_dmft_step"); dmft_step++)
       {
         if(dmft_step>1 && sigma_convergency) break;   //Run at least one dmft step under each charge step
 

@@ -342,22 +342,6 @@ namespace DMFT
     }
     GLV::ofs_running << "max_dmft_step  " << this->DMFT_step_max << std::endl;
 
-    //dmft_step_first
-    try {
-      std::vector<std::string> str_val;
-      this->read_parameter("dmft_step_first", str_val);
-
-      this->DMFT_step_first = atoi(str_val[0].c_str());
-    }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch(const bool not_given){
-      this->DMFT_step_first = this->DMFT_step_max;
-    }
-    GLV::ofs_running << "dmft_step_first  " << this->DMFT_step_first << std::endl;
-
     //max_dft_step
     try {
       std::vector<std::string> str_val;
@@ -807,7 +791,6 @@ namespace DMFT
           std::strcmp("double_counting", key_str_lower.c_str())==0 ||
           std::strcmp("max_charge_step", key_str_lower.c_str())==0 ||
           std::strcmp("max_dmft_step", key_str_lower.c_str())==0 ||
-          std::strcmp("dmft_step_first", key_str_lower.c_str())==0 ||
           std::strcmp("max_dft_step", key_str_lower.c_str())==0 ||
           std::strcmp("mc_step", key_str_lower.c_str())==0 || 
           std::strcmp("projection_window", key_str_lower.c_str())==0 ||
@@ -889,7 +872,6 @@ namespace DMFT
     else if(std::strcmp("double_counting", word.c_str())==0) return &flag_double_counting;
     else if(std::strcmp("max_charge_step", word.c_str())==0) return &charge_step_max;
     else if(std::strcmp("max_dmft_step", word.c_str())==0) return &DMFT_step_max;
-    else if(std::strcmp("dmft_step_first", word.c_str())==0) return &DMFT_step_first;
     else if(std::strcmp("max_dft_step", word.c_str())==0) return &DFT_step_max;
     else if(std::strcmp("mc_step", word.c_str())==0) return &MC_step;
     else if(std::strcmp("hyb_func", word.c_str())==0) return &hyb_func;
