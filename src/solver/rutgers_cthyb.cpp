@@ -1,4 +1,7 @@
 #include "rutgers_cthyb.h"
+#include "rutgers_atomic.h"
+
+#include <stdexcept>
 
 #include "../debug.h"
 #include "../constants.h"
@@ -38,6 +41,11 @@ namespace DMFT
     const std::vector<int>& norb_sub = atom.iatom_norb();
     const bool soc = band.soc();
     const int nspin = band.nspins();
+    if(soc || (nspin!=1 && nspin!=2))
+    {
+      std::cerr << "The current Rutgers interface requires collinear spins without SOC" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
     const int ntau = *(int*)in.parameter("n_tau");
     const int nomega = *(int*)in.parameter("n_omega");
 
@@ -256,202 +264,23 @@ namespace DMFT
   {
     debug::codestamp("Rutgers_CTHYB::write_cix");
 
-    int orb_count;
-    std::ofstream ofs(file.c_str(), std::ios::out);
-
-    ofs << "# CIX file for ctqmc!\n";
-    ofs << "# cluster_size, number of states, number of baths, maximum_matrix_size\n";
-    ofs << "1 " << (int)std::pow(2,2*m_tot) << ' ' << 2*m_tot << " 1\n";
-
-    ofs << "# baths, dimension, symmetry, global flip\n";
-    orb_count=0;
+    std::vector<double> levels(2*m_tot);
     for(int is=0; is<2; is++)
       for(int m=0; m<m_tot; m++)
-      {
-        ofs << orb_count << "  1  " << orb_count << "  " ;
-        if(is==0) ofs << orb_count << '\n';
-        else if(is==1) ofs << orb_count-m_tot << '\n';
-        orb_count++;
-      }
+        levels[is*m_tot+m] = Esplit[nspin==1 ? 0 : is][m*m_tot+m].real();
 
-    ofs << "# cluster energies for unique baths, eps[k]\n";
-    for(int is=0; is<2; is++)
-      for(int m=0; m<m_tot; m++)
-        if(nspin==2)
-          ofs << std::setw(22) << std::fixed << std::setprecision(15) 
-              << (Esplit[is][m*m_tot+m].real())*GLC::Hartree_to_eV;
-        else if(nspin==1)
-          ofs << std::setw(22) << std::fixed << std::setprecision(15) 
-              << (Esplit[0][m*m_tot+m].real())*GLC::Hartree_to_eV;
-    ofs << '\n';
-
-    ofs << "#   N   K   Sz size\n";
-    for(int dim=0; dim<(int)std::pow(2,2*m_tot); dim++)
+    try
     {
-      ofs << std::setw(7) << dim+1 
-          << std::setw(4) << site_occ(dim)
-          << "  0  " << std::setw(6) << std::fixed << std::setprecision(3) << site_Sz(dim, 2*m_tot)
-          << "  1  ";
-      
-      for(int ibath=0; ibath<2*m_tot; ibath++)
-        ofs << std::setw(7) << F_dagger_state(dim, ibath, 2*m_tot);
-
-      ofs << std::setw(25) << std::fixed << std::setprecision(15) 
-          << state_energy(dim, m_tot, nspin, Utensor, Esplit) << "  0\n"; 
+      const auto blocks = rutgers_atomic::solve(levels, Utensor);
+      std::ofstream ofs(file.c_str());
+      if(!ofs) throw std::runtime_error("Cannot open " + file);
+      rutgers_atomic::write_cix(ofs, levels, Utensor, blocks, GLC::Hartree_to_eV);
     }
-
-    ofs << "# Matrix elements\n";
-    for(int dim=0; dim<(int)std::pow(2,2*m_tot); dim++)
+    catch(const std::exception& error)
     {
-      for(int ibath=0; ibath<2*m_tot; ibath++)
-      {
-        int end_state = F_dagger_state(dim, ibath, 2*m_tot);
-        if(end_state==0)
-        {
-          ofs << std::setw(7) << dim+1
-              << "   0   0  0\n";
-        }
-        else
-        {
-          ofs << std::setw(7) << dim+1
-              << std::setw(7) << end_state
-              << "   1  1"
-              << std::setw(11) << std::fixed << std::setprecision(6)
-              << F_dagger_sign(dim, ibath) << '\n';
-        }
-      }
+      std::cerr << "Rutgers atomic problem: " << error.what() << std::endl;
+      std::exit(EXIT_FAILURE);
     }
-
-    ofs << "HB2   # Hubbard-I is used to determine high-frequency\n";
-
-    ofs << "# UCoulomb : (m1,s1) (m2,s2) (m3,s2) (m4,s1)  Uc[m1,m2,m3,m4]\n";
-    for(int ibath1=0; ibath1<2*m_tot; ibath1++)
-    {
-      for(int ibath2=0; ibath2<2*m_tot; ibath2++)
-      {
-        for(int ibath3=0; ibath3<2*m_tot; ibath3++)
-        {
-          for(int ibath4=0; ibath4<2*m_tot; ibath4++)
-          {
-            if(std::fabs(Utensor[ibath1][ibath2][ibath3][ibath4])>1.0e-3)
-            {
-              ofs << std::setw(3) << ibath1
-                  << std::setw(3) << ibath2
-                  << std::setw(3) << ibath3
-                  << std::setw(3) << ibath4
-                  << std::setw(12) << std::fixed << std::setprecision(6) 
-                  << Utensor[ibath1][ibath2][ibath3][ibath4]*GLC::Hartree_to_eV << '\n';
-            }
-          }
-        }
-      }
-    }
-
-    ofs << "# number of operators needed\n";
-    ofs << "0\n";
-
-    ofs.close();
-    return;
-  }
-
-  int Rutgers_CTHYB::site_occ(int n)
-  {
-    int count = 0;
-    while (n)
-    {
-      count += n & 1;
-      n >>= 1;
-    }
-    return count;
-  }
-
-  double Rutgers_CTHYB::site_Sz(int n, const int nbath)
-  {
-    double Sz = 0.0;
-
-    for(int i=0; i<nbath; i++)
-    {
-      if(i<nbath/2) Sz += 0.5*(n & 1);
-      else Sz -= 0.5*(n & 1);
-      n >>= 1;
-    }
-
-    return Sz;
-  }
-
-  int Rutgers_CTHYB::F_dagger_state(int n, const int ibath, const int nbath)
-  {
-    int count=0;
-
-    for(int i=0; i<nbath; i++)
-    {
-      if(i==ibath)
-      {
-        if(n&1) return 0;
-        else count += (int)std::pow(2, i);
-      }
-      count += (int)std::pow(2, i)*(n&1);
-      n >>= 1;
-    }
-
-    return count+1;
-  }
-
-  double Rutgers_CTHYB::F_dagger_sign(int n, const int ibath)
-  {
-    int count = 0;
-    for(int j=0; j<ibath; j++)
-    {
-        count += ((n >> j) & 1);
-    }
-    return  std::pow(-1, count);
-  }
-
-  double Rutgers_CTHYB::state_energy(
-    const int n, const int m_tot, const int nspin, 
-    const std::vector<std::vector<std::vector<std::vector<double>>>>& Utensor, 
-    const std::vector<std::vector<std::complex<double>>>& Esplit)
-  {
-    double Etot=0.0;
-
-    int ibath=0;
-    for(int is=0; is<2; is++)
-    {
-      for(int m=0; m<m_tot; m++)
-      {
-        if(nspin==2)
-          Etot += ((n>>ibath)&1)*(Esplit[is][m*m_tot+m].real());
-        else
-          Etot += ((n>>ibath)&1)*(Esplit[0][m*m_tot+m].real());
-        ibath++;
-      }
-    }
-
-    for(int ibath1=0; ibath1<2*m_tot; ibath1++)
-    {
-      int is1=ibath1/m_tot;
-      int m1 = ibath1<m_tot ? ibath1 : (ibath1-m_tot);
-      int occ1 = ((n>>ibath1)&1);
-      for(int ibath2=0; ibath2<ibath1; ibath2++)
-      {
-        int is2=ibath2/m_tot;
-        int m2 = ibath2<m_tot ? ibath2 : (ibath2-m_tot);
-        int occ2 = ((n>>ibath2)&1);
-
-        // if(is1==is2)
-        // {
-        //   Etot += (U-3.0*J)*occ1*occ2;
-        // }
-        // else
-        // {
-        //   if(m1==m2) Etot += U*occ1*occ2;
-        //   else Etot += (U-2.0*J)*occ1*occ2;
-        // }
-        Etot += Utensor[ibath1][ibath2][ibath2][ibath1]*occ1*occ2;
-      }
-    }
-
-    return Etot*GLC::Hartree_to_eV;
   }
 
   void Rutgers_CTHYB::read_self_energy(

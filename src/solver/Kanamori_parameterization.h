@@ -3,6 +3,7 @@
 //======================================================================
 #pragma once
 
+#include "coulomb_tensor.h"
 #include "../para/correlated_atoms.h"
 #include "../para/KS_bands.h"
 
@@ -16,10 +17,12 @@ namespace DMFT
     Kanamori_parameterization(){};
     ~Kanamori_parameterization(){};
 
+    static interaction_tensor kanamori(int M, double U, double J, bool full);
+
     void evaluate_coulomb_tensor(
           DFT_output::atoms_info& atom,
           std::vector<std::vector<std::vector<std::vector<
-          std::vector<double>>>>>& U_matrix );
+          std::vector<double>>>>>& U_matrix, const bool full=false );
 
     void out_ALPS_CTHYB(
           const int char_step,

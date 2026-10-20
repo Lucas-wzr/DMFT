@@ -9,6 +9,7 @@
 #include "alps_cthyb_segment.h"
 #include "PACS_cthyb.h"
 #include "rutgers_cthyb.h"
+#include "comctqmc.h"
 #include "iQIST_narcissus.h"
 #include "Hilbert_space.h"
 #include "coulomb_tensor.h"
@@ -29,6 +30,7 @@ namespace DMFT
     self_energy sigma;
     PACS_CTHYB pacs;
     Rutgers_CTHYB Rutgers;
+    ComCTQMC comctqmc;
     ALPS_CTHYB ALPS_hyb;
     ALPS_CTHYB_SEGMENT ALPS_hyb_segment;
     IQIST_NARCISSUS  iQIST_narcissus;

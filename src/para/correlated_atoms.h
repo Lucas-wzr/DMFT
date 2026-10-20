@@ -37,6 +37,7 @@ namespace DFT_output
     int magnetic(const int iatom);
     const std::vector<int>& iatom_norb(){return sub_norb;}
     int local_sym(){return local_symmetry;}
+    const std::vector<std::vector<int>>& magnetic_numbers(){return magnetic_number;}
     const std::vector<std::vector<int>>& Im2iorb(){return DMFT_orb_index;}
 
     public:
