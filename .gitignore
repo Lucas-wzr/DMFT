@@ -1,0 +1,25 @@
+DFTDMFT
+/bin/maxent
+/build/Makefile
+/build/impurities/
+/build/maxent/
+*.o
+*.so
+*.mod
+.cache
+.vscode
+html
+
+# Additional generated files and local backups
+*.a
+*.la
+*.lo
+*.d
+*.pyc
+*.pyo
+*.dll
+*.exe
+__pycache__/
+*.bak*
+*.log
+/build/relink-l
