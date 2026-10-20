@@ -33,7 +33,8 @@ namespace DFT_plus_DMFT
         DFT_output::atoms_info& atom,
         const double CWF_ep0,
         const double CWF_ep1,
-        const double CWF_T )
+        const double CWF_T,
+        const double projection_min_weight )
   {
     debug::codestamp("projector::evaluate_projector");
 
@@ -232,6 +233,65 @@ namespace DFT_plus_DMFT
     double cwf_hermitian_max_local = 0.0;
 
     std::vector<std::vector<std::complex<double>>> eigenvec;
+    std::ofstream window_report("window_overlap_rank" + std::to_string(myid) + ".dat");
+    if(!window_report)
+      projector_abort("cannot open window overlap diagnostics", -1, -1, 0);
+    window_report << "# k spin threshold eigenvalues(A^dagger A), ascending; before normalization and CWF weights\n"
+                  << std::setprecision(17);
+    struct { double weight; int point; } local_min = {std::numeric_limits<double>::infinity(), -1}, global_min;
+    int rejected_local = 0;
+
+    const auto check_window_overlap = [&](int i_k_point, int is)
+    {
+      // A contains overlaps of the KS window with Lowdin-orthonormal local orbitals.
+      // Check coverage before normalization can hide weak or missing directions.
+      cblas_zgemm(CblasRowMajor, CblasConjTrans, CblasNoTrans,
+                  norb, norb, wbands[is], &one,
+                  mat_tmp.data(), norb, mat_tmp.data(), norb,
+                  &zero, norm_orth.data(), norb);
+      const lapack_int window_info = LAPACKE_zheev(
+          LAPACK_ROW_MAJOR, 'N', 'U', norb, norm_orth.data(), norb, eigen_val.data());
+      if(window_info != 0)
+        projector_abort("window overlap eigensolver failed", i_k_point, is, window_info);
+      window_report << i_k_point << " " << is << " " << projection_min_weight;
+      for(double value : eigen_val){
+        if(!std::isfinite(value))
+          projector_abort("non-finite window overlap eigenvalue", i_k_point, is, 0);
+        window_report << " " << value;
+      }
+      window_report << "\n";
+      if(eigen_val[0] < local_min.weight){
+        local_min.weight = eigen_val[0];
+        local_min.point = i_k_point*nspin + is;
+      }
+      if(eigen_val[0] < projection_min_weight){
+        rejected_local++;
+        return false;
+      }
+      return true;
+    };
+
+    const auto finish_window_overlap = [&]()
+    {
+      window_report.close();
+      int rejected = 0;
+      MPI_Allreduce(&local_min, &global_min, 1, MPI_DOUBLE_INT, MPI_MINLOC, MPI_COMM_WORLD);
+      MPI_Allreduce(&rejected_local, &rejected, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+      if(myid == 0){
+        GLV::ofs_running << "Window overlap: minimum weight = " << std::setprecision(12)
+                         << global_min.weight << ", k = " << global_min.point/nspin
+                         << ", spin = " << global_min.point%nspin
+                         << ", threshold = " << projection_min_weight
+                         << ", rejected k/spin points = " << rejected << std::endl;
+      }
+      if(rejected){
+        std::ostringstream message;
+        message << "KS window does not cover the correlated subspace: minimum weight "
+                << global_min.weight << " < " << projection_min_weight
+                << "; enlarge projection_window";
+        projector_abort(message.str(), global_min.point/nspin, global_min.point%nspin, 0);
+      }
+    };
 
     if(myid == 0)
       GLV::ofs_running << (projector_type == 2
@@ -326,6 +386,8 @@ namespace DFT_plus_DMFT
                     &Lowdin[0], norb,
                     &zero,
                     &mat_tmp[0], norb);
+
+        if(!check_window_overlap(i_k_point,is)) continue;
 
         if(projector_type == 1)
         {
@@ -575,6 +637,8 @@ namespace DFT_plus_DMFT
 
       }//is
     }//ik
+
+    finish_window_overlap();
 
     // Rank 0 always owns k=0; share its basis size with ranks that may own no
     // k point when more MPI tasks than k points are requested.

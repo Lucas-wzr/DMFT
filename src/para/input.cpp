@@ -12,6 +12,7 @@
 #include <cerrno>
 #include <cmath>
 #include <string>
+#include <stdexcept>
 
 namespace
 {
@@ -192,6 +193,8 @@ namespace DMFT
         this->flag_impurity_solver = 4;
       else if(std::strcmp("iqist",this->strtolower(str_val[0]).c_str())==0)
         this->flag_impurity_solver = 5;
+      else if(this->strtolower(str_val[0])=="comctqmc")
+        this->flag_impurity_solver = 6;
       else
       {
         std::cerr << "unsupported value of impurity_solver " << this->strtolower(str_val[0]) << std::endl;
@@ -212,6 +215,36 @@ namespace DMFT
     else if(this->flag_impurity_solver==3) GLV::ofs_running << "pacs" << std::endl;
     else if(this->flag_impurity_solver==4) GLV::ofs_running << "rutgers-cthyb" << std::endl;
     else if(this->flag_impurity_solver==5) GLV::ofs_running << "iqist" << std::endl;
+    else if(this->flag_impurity_solver==6) GLV::ofs_running << "comctqmc" << std::endl;
+
+    //interaction_type
+    this->flag_interaction_type = 1;
+    try {
+      std::vector<std::string> str_val;
+      this->read_parameter("interaction_type", str_val);
+      const std::string value = this->strtolower(str_val[0]);
+      if(value=="density_density") this->flag_interaction_type = 1;
+      else if(value=="kanamori") this->flag_interaction_type = 2;
+      else if(value=="slater_condon") this->flag_interaction_type = 3;
+      else if(value=="tensor") this->flag_interaction_type = 4;
+      else {
+        std::cerr << "Unsupported interaction_type " << value << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    }
+    catch(const bool not_given) { (void)not_given; }
+    catch(const std::string messg) {
+      std::cerr << messg << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if(this->flag_interaction_type!=1 && this->flag_impurity_solver!=4 && this->flag_impurity_solver!=6) {
+      std::cerr << "General interactions require rutgers-cthyb or comctqmc" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    GLV::ofs_running << "interaction_type  "
+      << (this->flag_interaction_type==1 ? "density_density" :
+          this->flag_interaction_type==2 ? "kanamori" :
+          this->flag_interaction_type==3 ? "slater_condon" : "tensor") << std::endl;
 
     //double_counting
     try {
@@ -462,7 +495,7 @@ namespace DMFT
       std::vector<std::string> str_val;
       this->read_parameter("mc_step", str_val);
 
-      this->MC_step = atoi(str_val[0].c_str());
+      this->MC_step = std::atoll(str_val[0].c_str());
     }
     catch (const std::string messg) {
       std::cerr << messg << std::endl;
@@ -473,6 +506,44 @@ namespace DMFT
       this->MC_step = 5000000;
     }
     GLV::ofs_running << "mc_step  " << this->MC_step << std::endl;
+
+    this->comctqmc_nproc = 0;
+    this->warmup = 100000;
+    this->comctqmc_exe = "CTQMC";
+    this->comctqmc_evalsim = "EVALSIM";
+    this->comctqmc_launcher = "comctqmc-launch";
+    if(this->flag_impurity_solver==6)
+    {
+      try {
+        for(const std::string key : {"comctqmc_nproc", "warmup",
+              "comctqmc_exe", "comctqmc_evalsim", "comctqmc_launcher"})
+        {
+          std::vector<std::string> value;
+          try { this->read_parameter(const_cast<char*>(key.c_str()), value); }
+          catch(const bool not_given) { continue; }
+          if(key=="comctqmc_nproc") this->comctqmc_nproc = std::stoi(value[0]);
+          else if(key=="warmup") this->warmup = std::stoll(value[0]);
+          else if(key=="comctqmc_exe") this->comctqmc_exe = value[0];
+          else if(key=="comctqmc_evalsim") this->comctqmc_evalsim = value[0];
+          else this->comctqmc_launcher = value[0];
+        }
+        if(this->comctqmc_nproc<0 || this->warmup<0 || this->MC_step<=0)
+          throw std::runtime_error("Invalid ComCTQMC sampling controls");
+      }
+      catch(const std::string& message) {
+        std::cerr << message << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      catch(const std::exception& error) {
+        std::cerr << error.what() << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      GLV::ofs_running << "comctqmc_nproc  " << this->comctqmc_nproc << '\n'
+        << "warmup  " << this->warmup << '\n'
+        << "comctqmc_exe  " << this->comctqmc_exe << '\n'
+        << "comctqmc_evalsim  " << this->comctqmc_evalsim << '\n'
+        << "comctqmc_launcher  " << this->comctqmc_launcher << std::endl;
+    }
 
     int local_symmetry_tmp;
     try {
@@ -519,6 +590,24 @@ namespace DMFT
     }
     if(this->flag_projector ==1) GLV::ofs_running << "projector  default" << std::endl;
     else if(this->flag_projector ==2) GLV::ofs_running << "projector  cwf" << std::endl;
+
+    try {
+      std::vector<std::string> str_val;
+      this->read_parameter("projection_min_weight", str_val);
+      this->projection_min_weight = parse_cwf_value("projection_min_weight", str_val[0]);
+    }
+    catch(const std::string messg){
+      std::cerr << messg << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    catch(const bool not_given){
+      this->projection_min_weight = 0.9;
+    }
+    if(!(this->projection_min_weight > 0.0 && this->projection_min_weight <= 1.0)){
+      std::cerr << "projection_min_weight must be in (0,1]" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    GLV::ofs_running << "projection_min_weight  " << this->projection_min_weight << std::endl;
 
     //closest wannier function
     try {
@@ -788,6 +877,12 @@ namespace DMFT
           std::strcmp("temperature", key_str_lower.c_str())==0 ||
           std::strcmp("magnetism", key_str_lower.c_str())==0 ||
           std::strcmp("impurity_solver", key_str_lower.c_str())==0 ||
+          std::strcmp("interaction_type", key_str_lower.c_str())==0 ||
+          key_str_lower=="comctqmc_nproc" ||
+          key_str_lower=="warmup" ||
+          key_str_lower=="comctqmc_exe" ||
+          key_str_lower=="comctqmc_evalsim" ||
+          key_str_lower=="comctqmc_launcher" ||
           std::strcmp("double_counting", key_str_lower.c_str())==0 ||
           std::strcmp("max_charge_step", key_str_lower.c_str())==0 ||
           std::strcmp("max_dmft_step", key_str_lower.c_str())==0 ||
@@ -808,6 +903,7 @@ namespace DMFT
           std::strcmp("hyf_dc_shift_d", key_str_lower.c_str())==0 ||
           std::strcmp("hyf_dc_shift_p", key_str_lower.c_str())==0 ||
           std::strcmp("projector", key_str_lower.c_str())==0 ||
+          std::strcmp("projection_min_weight", key_str_lower.c_str())==0 ||
           std::strcmp("cwf_ep0", key_str_lower.c_str())==0 ||
           std::strcmp("cwf_ep1", key_str_lower.c_str())==0 ||
           std::strcmp("cwf_t", key_str_lower.c_str())==0 ||
@@ -869,6 +965,12 @@ namespace DMFT
     else if(std::strcmp("n_tau", word.c_str())==0) return &n_tau;
     else if(std::strcmp("n_omega", word.c_str())==0) return &n_omega;
     else if(std::strcmp("impurity_solver", word.c_str())==0) return &flag_impurity_solver;
+    else if(std::strcmp("interaction_type", word.c_str())==0) return &flag_interaction_type;
+    else if(word=="comctqmc_nproc") return &comctqmc_nproc;
+    else if(word=="warmup") return &warmup;
+    else if(word=="comctqmc_exe") return &comctqmc_exe;
+    else if(word=="comctqmc_evalsim") return &comctqmc_evalsim;
+    else if(word=="comctqmc_launcher") return &comctqmc_launcher;
     else if(std::strcmp("double_counting", word.c_str())==0) return &flag_double_counting;
     else if(std::strcmp("max_charge_step", word.c_str())==0) return &charge_step_max;
     else if(std::strcmp("max_dmft_step", word.c_str())==0) return &DMFT_step_max;
@@ -892,6 +994,7 @@ namespace DMFT
     else if (std::strcmp("cwf_ep1", word.c_str()) == 0) return &cwf_ep1;
     else if (std::strcmp("cwf_t", word.c_str()) == 0) return &cwf_t;
     else if (std::strcmp("projector", word.c_str()) == 0) return &flag_projector;
+    else if (std::strcmp("projection_min_weight", word.c_str()) == 0) return &projection_min_weight;
     else if (std::strcmp("nf", word.c_str()) == 0) return &nf;
     else
     {
@@ -926,6 +1029,7 @@ namespace DMFT
     ofs << "temperature" << std::setw(10) << std::setprecision(2) << this->temperature << '\n';
     ofs << "magnetism" << std::setw(5) << this->flag_magnetism << '\n';
     ofs << "impurity_solver" << std::setw(5) << this->flag_impurity_solver << '\n';
+    ofs << "interaction_type" << std::setw(5) << this->flag_interaction_type << '\n';
     ofs << "n_tau" << std::setw(5) << this->n_tau << '\n';
     ofs << "n_omega" << std::setw(5) << this->n_omega << '\n';
     ofs << "double_counting" << std::setw(5) << this->flag_double_counting << std::endl;

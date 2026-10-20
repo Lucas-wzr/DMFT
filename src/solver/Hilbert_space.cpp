@@ -38,7 +38,7 @@ namespace DFT_plus_DMFT
       for(int is=0; is<this->nspin; is++)
         this->sigma_correction[is].resize(this->n_KS_bands, 0);
     }
-    else{
+    else if(type!=2){
       if(this->sigma_correction.size() != this->nspin){
         std::cerr << "Error in reading the correlated bands windows" << std::endl;
         std::exit(EXIT_FAILURE);
@@ -64,7 +64,7 @@ namespace DFT_plus_DMFT
       for(int is=0; is<this->nspin; is++)
         this->DOS_band[is].resize(this->n_KS_bands, 0);
     }
-    else{
+    else if(type!=2){
       if(this->DOS_band.size() != this->nspin){
         std::cerr << "Error in reading the correlated bands windows" << std::endl;
         std::exit(EXIT_FAILURE);
@@ -82,6 +82,12 @@ namespace DFT_plus_DMFT
     
     if(type==0) this->deter_bands_window_first_charge_step(in, band);
     else if(type==1) this->read_bands_windows(band);
+    else if(type==2){
+      // The chemical-potential routine counts only window electrons.
+      for(int is=0;is<this->nspin;is++)
+        this->n_valence -= (this->nspin==1 ? 2 : 1)*this->wbands_ibands[is].front();
+    }
+    // type=2 retains the band indices and refreshes eigenvalues after a KS update.
 
     for(int is=0; is<this->nspin; is++){
       if(this->eigen_values[is].empty()) 

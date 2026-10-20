@@ -23,3 +23,8 @@ __pycache__/
 *.bak*
 *.log
 /build/relink-l
+temp_docs
+tests
+tools
+*pycache*
+coding_log

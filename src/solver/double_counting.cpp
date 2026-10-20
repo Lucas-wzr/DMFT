@@ -3,9 +3,36 @@
 #include "../debug.h"
 #include "../constants.h"
 #include "../global_variables.h"
+#include "Slater_Condon_parameterization.h"
 
 #include <iomanip>
 #include <cstdlib>
+#include <fstream>
+#include <vector>
+
+namespace
+{
+  // For Slater-Condon interactions, U denotes F0, so the legacy conversion
+  // from Kanamori U to averU does not apply. Use F0 and the shell-averaged J
+  // in the DC formula; when explicit Slater integrals are supplied, derive
+  // both values from them to keep DC consistent with the impurity interaction.
+  // The returned vector contains {U_dc, J_dc} in Hartree.
+  std::vector<double> slater_dc_parameters(int ineq, DFT_output::atoms_info& atom)
+  {
+    const int iatom = atom.ineq_iatom(ineq);
+    const double U = atom.Uval(iatom), J = atom.Jval(iatom);
+    // Slater U is F0; explicit integrals also determine the shell-averaged J.
+    std::ifstream input("Slater_integrals_impurity" + std::to_string(ineq) + ".dat");
+    if(!input) return {U,J};
+    const int l = atom.L(iatom);
+    const auto F = DMFT::slater_condon::read_integrals(input,l,GLC::Hartree_to_eV);
+    double average_J;
+    if(l == 1) average_J = F[1]/5.0;
+    else if(l == 2) average_J = (F[1]+F[2])/14.0;
+    else average_J = (286.0*F[1]+195.0*F[2]+250.0*F[3])/6435.0;
+    return {F[0],average_J};
+  }
+}
 
 namespace DMFT
 {
@@ -39,14 +66,20 @@ namespace DMFT
         if(SOC) nspin_tmp=4;
 
         const double Norb = 2*m_tot;
-        const double averU = ( atom.Uval(iatom) + (atom.Uval(iatom)-2.0*atom.Jval(iatom))
+        double averU = ( atom.Uval(iatom) + (atom.Uval(iatom)-2.0*atom.Jval(iatom))
                               *(Norb-2) )/(Norb-1.0);
 
         //K. Held. Adv. Phys., 56(2007):829--926
         // const double averU = ( atom.Uval(iatom) + (atom.Uval(iatom)-2.0*atom.Jval(iatom))*(m_tot-1.0) +
         //                       (atom.Uval(iatom)-3.0*atom.Jval(iatom))*(m_tot-1.0))/(2*m_tot-1.0);
 
-        const double averJ = atom.Jval(iatom);
+        double averJ = atom.Jval(iatom);
+        if(*(int*)in.parameter("interaction_type") == 3)
+        {
+          const auto parameters = slater_dc_parameters(ineq,atom);
+          averU = parameters[0];
+          averJ = parameters[1];
+        }
 
         if(this->V_dc[ineq].empty()) this->V_dc[ineq].resize(nspin_tmp);
         
@@ -114,6 +147,11 @@ namespace DMFT
              GLC::Hartree_to_eV*this->V_dc[ineq][is][m*m_tot+m].real();
 
          GLV::ofs_running << std::endl;
+         if(*(int*)in.parameter("interaction_type") == 3)
+           GLV::ofs_running << "DC parameters: U_DC=" << averU*GLC::Hartree_to_eV
+             << " eV J_DC=" << averJ*GLC::Hartree_to_eV << " eV N_DC="
+             << atom.occ_num(iatom,0)+atom.occ_num(iatom,1)
+             << " N_DC_spin=" << atom.occ_num(iatom,is) << '\n';
         
         }
       }//ineq
@@ -170,9 +208,15 @@ namespace DMFT
         if(SOC) nspin_tmp=4;
 
         const double Norb = 2*m_tot;
-        const double averU = ( atom.Uval(iatom) + (atom.Uval(iatom)-2.0*atom.Jval(iatom))
+        double averU = ( atom.Uval(iatom) + (atom.Uval(iatom)-2.0*atom.Jval(iatom))
                               *(Norb-2) )/(Norb-1.0);
-        const double averJ = atom.Jval(iatom);
+        double averJ = atom.Jval(iatom);
+        if(*(int*)in.parameter("interaction_type") == 3)
+        {
+          const auto parameters = slater_dc_parameters(ineq,atom);
+          averU = parameters[0];
+          averJ = parameters[1];
+        }
 
         if(this->V_dc[ineq].empty()) this->V_dc[ineq].resize(nspin_tmp);
 
@@ -213,6 +257,10 @@ namespace DMFT
             GLV::ofs_running << std::setw(12) << std::fixed << std::setprecision(6)
                              << GLC::Hartree_to_eV*this->V_dc[ineq][is][m*m_tot+m].real();
           GLV::ofs_running << std::endl;
+          if(*(int*)in.parameter("interaction_type") == 3)
+            GLV::ofs_running << "DC parameters: U_DC=" << averU*GLC::Hartree_to_eV
+              << " eV J_DC=" << averJ*GLC::Hartree_to_eV << " eV N_DC="
+              << nominal_nf << " N_DC_spin=" << nominal_nf_sigma << '\n';
         }
       }
     }

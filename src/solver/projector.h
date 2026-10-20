@@ -28,7 +28,8 @@ namespace DFT_plus_DMFT
         DFT_output::atoms_info& atom,
         const double CWF_ep0,
         const double CWF_ep1,
-        const double CWF_T);
+        const double CWF_T,
+        const double projection_min_weight = 0.9);
 
     void evalute_projector_k(
           DFT_output::overlap_matrix& ovlp,

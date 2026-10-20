@@ -3,6 +3,12 @@
 //    Phys. Rev. B, 2010,81:195107. https://doi.org/10.1103/PhysRevB.81.195107
 //    The energy unit used is eV
 //=================================================================================
+
+//=================================================================================
+//    Bundled CT-HYB matches ru-ccmt/EDMFTF commit
+//    50cdecdc34064a6276b7fae4b7753a2f768fdb46 (2024-03-31),
+//    with local entry-point and MPI lifecycle adaptations
+//=================================================================================
 #pragma once
 
 #include "../para/KS_bands.h"
@@ -53,15 +59,6 @@ namespace DMFT
     void write_cix(const int nspin, const int m_tot, const std::string file, 
         const std::vector<std::vector<std::complex<double>>>& Esplit,
         const std::vector<std::vector<std::vector<std::vector<double>>>>& Utensor);
-
-    int site_occ(int n);
-    double site_Sz(int n, const int nbath);
-    int F_dagger_state(int n, const int ibath, const int nbath);
-    double state_energy(const int n, const int m_tot, const int nspin, 
-            const std::vector<std::vector<std::vector<std::vector<double>>>>& Utensor,
-            const std::vector<std::vector<std::complex<double>>>& Eimp);
-
-    double F_dagger_sign(int n, const int ibath);
 
     //========================interface=========================
     std::vector<std::vector<std::vector<std::complex<double>>>>&

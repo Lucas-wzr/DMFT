@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# Arguments: process count (0 = allocated cores), CTQMC, serial EVALSIM.
+nproc=$1
+ctqmc=$2
+evalsim=$3
+
+# Recover the job cpuset, rather than the affinity inherited from DMFT rank 0.
+cpu_list=$(awk '/Cpus_allowed_list/ {print $2}' /proc/self/status)
+while IFS=: read -r id controllers path; do
+    if [[ ",$controllers," == *,cpuset,* ]]; then
+        job_path=${path%/step_*}
+        file="/sys/fs/cgroup/cpuset${job_path}/cpuset.cpus"
+    elif [[ "$id" == 0 && -z "$controllers" ]]; then
+        job_path=${path%/step_*}
+        file="/sys/fs/cgroup${job_path}/cpuset.cpus.effective"
+    else
+        continue
+    fi
+    if [[ -r "$file" ]]; then
+        allocated=$(cat "$file")
+        if [[ -n "$allocated" ]]; then
+            cpu_list=$allocated
+            break
+        fi
+    fi
+done < /proc/self/cgroup
+
+# Use one allowed logical CPU per physical core, avoiding SMT oversubscription.
+declare -A seen
+cpus=()
+IFS=, read -ra ranges <<< "$cpu_list"
+for range in "${ranges[@]}"; do
+    first=${range%-*}
+    last=${range#*-}
+    for ((cpu=first; cpu<=last; cpu++)); do
+        topology="/sys/devices/system/cpu/cpu${cpu}/topology"
+        key="$(cat "$topology/physical_package_id"):$(cat "$topology/core_id")"
+        if [[ -z ${seen[$key]+yes} ]]; then
+            seen[$key]=1
+            cpus+=("$cpu")
+        fi
+    done
+done
+cores=${#cpus[@]}
+if ((nproc==0)); then nproc=$cores; fi
+if ((nproc<1 || nproc>cores)); then
+    echo "Requested $nproc CTQMC ranks, but only $cores allocated physical cores are available" >&2
+    exit 1
+fi
+pin_list=$(IFS=,; echo "${cpus[*]}")
+taskset -pc "$pin_list" $$ >/dev/null
+printf 'CTQMC processes=%s, available physical cores=%s, CPU list=%s\n' "$nproc" "$cores" "$pin_list"
+
+# The child MPI world must not inherit the parent world's connections or pinning.
+for name in $(compgen -e); do
+    case "$name" in
+        PMI_*|PMIX_*|OMPI_*|HYDRA_*|MPI_LOCAL*|SLURM_*|I_MPI_PIN*) unset "$name" ;;
+    esac
+done
+export I_MPI_HYDRA_BOOTSTRAP=fork I_MPI_HYDRA_RMK=user
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+export I_MPI_PIN=1 I_MPI_PIN_RESPECT_CPUSET=1 I_MPI_PIN_PROCESSOR_LIST="$pin_list"
+mpirun -launcher fork -hosts localhost -np "$nproc" "$ctqmc" params > ctqmc.log 2>&1
+"$evalsim" params > evalsim.log 2>&1

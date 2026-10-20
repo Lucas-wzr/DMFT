@@ -396,8 +396,8 @@ LINKER = $MPI_FC -nofor-main -cxxlib
 OPTIONS = -g -O3 -std=c++14
 LINK_OPTIONS = -g -O3
 MACRO = $MACRO_ABACUS
-INCLUDES = -I\${MKLROOT}/include
-LIB_MKL = -L\${MKLROOT}/lib/intel64 -lmkl_intel_lp64 -lmkl_sequential -lmkl_core
+INCLUDES = -I../thirdparty/eigen-3.4.0 -I\${MKLROOT}/include
+LIB_MKL = -L\${MKLROOT}/lib/intel64 -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lifport -lifcoremt
 LIB_PACS = -L${root_dir}/build/impurities/PACS -l:libpacs.a
 LIB_iQIST = -L${root_dir}/build/impurities/iQIST/ct_hyb1 -l:libnarcissus.a \\
 -L${root_dir}/build/impurities/iQIST/dependencies/Flink -l:libflink.a
@@ -431,6 +431,8 @@ timer.o \\
 solver.o \\
 projector.o \\
 chemical_potential.o \\
+density_matrix.o \\
+lattice.o \\
 Hilbert_space.o \\
 self_energy.o \\
 self_energy_imaginary_aixs.o \\
@@ -443,11 +445,15 @@ PACS_cthyb.o \\
 alps_cthyb.o \\
 alps_cthyb_segment.o \\
 rutgers_cthyb.o \\
+rutgers_atomic.o \\
+comctqmc.o \\
+Slater_Condon_parameterization.o \\
 iQIST_narcissus.o \\
 math_zone.o \\
 spectrum.o \\
 charge_scf.o \\
-charge_scf_aims.o
+charge_scf_aims.o \\
+charge_scf_abacus.o
 
 #====================
 #   Target
@@ -474,7 +480,7 @@ LINKER = $MPI_FC -nofor-main -cxxlib
 OPTIONS = -g -O3 -std=c++14
 LINK_OPTIONS = -g -O3
 MACRO = -D__FHIaims $MACRO_ABACUS
-INCLUDES = -I\${MKLROOT}/include -I${FHIaims_lib_path}/include
+INCLUDES = -I../thirdparty/eigen-3.4.0 -I\${MKLROOT}/include -I${FHIaims_lib_path}/include
 
 LIB_MKL = -L\${MKLROOT}/lib/intel64 -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lmkl_blacs_intelmpi_lp64 \\
 -lmkl_scalapack_lp64 -lifport -lifcoremt
@@ -514,6 +520,8 @@ timer.o \\
 solver.o \\
 projector.o \\
 chemical_potential.o \\
+density_matrix.o \\
+lattice.o \\
 Hilbert_space.o \\
 self_energy.o \\
 self_energy_imaginary_aixs.o \\
@@ -526,11 +534,15 @@ PACS_cthyb.o \\
 alps_cthyb.o \\
 alps_cthyb_segment.o \\
 rutgers_cthyb.o \\
+rutgers_atomic.o \\
+comctqmc.o \\
+Slater_Condon_parameterization.o \\
 iQIST_narcissus.o \\
 math_zone.o \\
 spectrum.o \\
 charge_scf.o \\
-charge_scf_aims.o
+charge_scf_aims.o \\
+charge_scf_abacus.o
 
 #====================
 #   Target

@@ -8,6 +8,7 @@
 #include "coulomb_tensor.h"
 #include "spectrum.h"
 #include "charge_scf.h"
+#include "charge_scf_abacus.h"
 
 namespace DFT_plus_DMFT
 {
