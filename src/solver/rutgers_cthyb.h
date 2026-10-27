@@ -49,14 +49,14 @@ namespace DMFT
           std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>& hyb_omega,
           DMFT::coulomb_tensor& Umat );
 
-    void write_params(DMFT::input_info& in, const std::string file, const double mu);
+    void write_params(DMFT::input_info& in, const std::string file, const double mu, const bool diagonal);
     void write_delta_omega(DMFT::input_info& in, const std::string file,
           const int nspin, const int nomega, 
           const int m_tot, const std::vector<double>& freq,
           const std::vector<std::vector<
           std::vector<std::complex<double>>>>& hyb_omega);
 
-    void write_cix(const int nspin, const int m_tot, const std::string file, 
+    bool write_cix(const int nspin, const int m_tot, const std::string file,
         const std::vector<std::vector<std::complex<double>>>& Esplit,
         const std::vector<std::vector<std::vector<std::vector<double>>>>& Utensor);
 

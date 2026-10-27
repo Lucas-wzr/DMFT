@@ -33,7 +33,7 @@ def Broad(width, om, fw):
         eps = sorted(np.hstack((x1, x2)))
         x3 = om[im]-eps
         gs = np.exp(-x3**2/(2*w**2))/(np.sqrt(2*np.pi)*w)
-        yn = integrate.trapz(fwi(eps) * gs, x=eps)
+        yn = integrate.trapezoid(fwi(eps) * gs, x=eps)
         fwn.append(yn)
     return np.array(fwn)
 
