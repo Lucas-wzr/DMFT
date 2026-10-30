@@ -42,7 +42,7 @@ namespace DFT_output
 
   }
 
-  std::vector<std::complex<double>>& overlap_matrix::overlap()
+  DFT_plus_DMFT::Matrix& overlap_matrix::overlap()
   {
     switch(this->flag_DFT_solver)
     {
@@ -58,7 +58,7 @@ namespace DFT_output
     } 
   }
 
-  std::vector<std::complex<double>>& overlap_matrix::overlap_localorb()
+  DFT_plus_DMFT::Matrix& overlap_matrix::overlap_localorb()
   {
     switch(this->flag_DFT_solver)
     {

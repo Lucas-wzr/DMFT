@@ -5,7 +5,9 @@
 #include "../mpi_environment.h"
 #include "../para/input.h"
 #include "../global_variables.h"
-#include "math_zone.h"
+#include "../matrix_types.h"
+#include <Eigen/LU>
+#include <iostream>
 
 #include <cmath>
 #include <sstream>
@@ -18,16 +20,16 @@
 #include <stdio.h>
 
 #include <elsi.h>
+#include <mpi.h>
 
 namespace DFT_plus_DMFT
 {
   void Charge_SCF_aims::output_charge_density_matrix(
         const int nks, 
-        std::vector<std::vector<std::vector<
-        std::complex<double>>>>& dens_mat_cmplx)
+        std::vector<std::vector<Matrix>>& dens_mat_cmplx)
   {
     debug::codestamp("Charge_SCF_aims::output_charge_density");
-    const int nbasis = (int)std::sqrt(dens_mat_cmplx[0][0].size());
+    const int nbasis = dens_mat_cmplx[0][0].rows();
 
     std::vector<int> k_map;
     int task_nks=0;
@@ -40,7 +42,7 @@ namespace DFT_plus_DMFT
     elsi_rw_handle rwh;
     c_elsi_init_rw(&rwh,1,0,nbasis,0.0);
 
-    std::vector<std::complex<double>> dense_mat_tmp(nbasis*nbasis);
+    Matrix dense_mat_tmp;
 
     for(int ik=0; ik<task_nks; ik++){
       for(int ispin=0; ispin<dens_mat_cmplx[0].size(); ispin++){
@@ -65,10 +67,7 @@ namespace DFT_plus_DMFT
         // system(rmfl.str().c_str());
 
         //Fortran order : column major
-        for(int ibasis1=0; ibasis1<nbasis; ibasis1++)
-          for(int ibasis2=0; ibasis2<nbasis; ibasis2++)
-            dense_mat_tmp[ibasis1*nbasis + ibasis2] = 
-              std::conj(dens_mat_cmplx[ik][ispin][ibasis1*nbasis + ibasis2]);
+        dense_mat_tmp = dens_mat_cmplx[ik][ispin].conjugate();
 
         c_elsi_write_mat_complex(rwh, &file[0], reinterpret_cast<double _Complex*>(dense_mat_tmp.data()));
         
@@ -184,11 +183,10 @@ namespace DFT_plus_DMFT
 
   void Charge_SCF_aims::read_charge_density_matrix(
         const int nks, 
-        std::vector<std::vector<std::vector<
-        std::complex<double>>>>& dens_mat_cmplx)
+        std::vector<std::vector<Matrix>>& dens_mat_cmplx)
   {
     debug::codestamp("Charge_SCF_aims::read_charge_density_matrix");
-    const int nbasis = (int)std::sqrt(dens_mat_cmplx[0][0].size());
+    const int nbasis = dens_mat_cmplx[0][0].rows();
 
     std::vector<int> k_map;
     int task_nks=0;
@@ -219,10 +217,7 @@ namespace DFT_plus_DMFT
         c_elsi_read_mat_complex(rwh, &file[0], reinterpret_cast<double _Complex*>(dens_mat_cmplx[ik][ispin].data()));
 
         //C++ order : row major
-        for(int ibasis1=0; ibasis1<nbasis; ibasis1++)
-          for(int ibasis2=0; ibasis2<nbasis; ibasis2++)
-            dens_mat_cmplx[ik][ispin][ibasis1*nbasis + ibasis2] = 
-              std::conj(dens_mat_cmplx[ik][ispin][ibasis1*nbasis + ibasis2]);
+        dens_mat_cmplx[ik][ispin] = dens_mat_cmplx[ik][ispin].conjugate();
       }
     }
 
@@ -278,39 +273,35 @@ namespace DFT_plus_DMFT
 
     if(mix_step==1) return;
 
+    const int n = this->dRrho.size();
+
     //Calculate Abar
-    std::vector<double> Abar(this->dRrho.size()*this->dRrho.size(), 0.0);
+    RealMatrix Abar = RealMatrix::Zero(n, n);
 
     for(int is=0; is<this->dRrho.back().size();is++)
-      for(int i=0; i<this->dRrho.size(); i++)
-        for(int j=0; j<this->dRrho.size(); j++){
+      for(int i=0; i<n; i++)
+        for(int j=0; j<n; j++){
           for(int igrid=0; igrid<this->dRrho[i][is].size(); igrid++)
-            Abar[i*this->dRrho.size()+j] += std::pow(this->partition_tab[igrid],2)*
+            Abar(i,j) += std::pow(this->partition_tab[igrid],2)*
               this->dRrho[i][is][igrid]*this->dRrho[j][is][igrid];
         }
     
-    std::vector<double> Abar_tmp(Abar);
-    MPI_Allreduce(&Abar_tmp[0], &Abar[0], Abar.size(), MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-
-    std::vector<int> ipiv(this->dRrho.size());
-    general_real_matrix_inverse(&Abar[0], this->dRrho.size(), &ipiv[0]);
+    MPI_Allreduce(MPI_IN_PLACE, Abar.data(), Abar.size(), MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
     //dRR
-    std::vector<double> dRR(this->dRrho.size(), 0.0);
+    Eigen::VectorXd dRR = Eigen::VectorXd::Zero(n);
     for(int is=0; is<this->dRrho.back().size();is++)
-      for(int i=0; i<this->dRrho.size(); i++)
+      for(int i=0; i<n; i++)
         for(int igrid=0; igrid<this->dRrho[i][is].size(); igrid++)
           dRR[i] += std::pow(this->partition_tab[igrid],2)*
            this->dRrho[i][is][igrid]*this->Rrho.back()[is][igrid];
 
-    std::vector<double> dRR_tmp(dRR);
-    MPI_Allreduce(&dRR_tmp[0], &dRR[0], dRR.size(), MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, dRR.data(), dRR.size(), MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
-    //alpha
-    alpha.resize(this->dRrho.size(), 0.0);
-    for(int i=0; i<this->dRrho.size(); i++)
-      for(int j=0; j<this->dRrho.size(); j++)
-        alpha[i] -= Abar[j*this->dRrho.size()+i]*dRR[j];
+    // Abar is the symmetric residual Gram matrix: Abar * alpha = -dRR.
+    alpha.resize(n);
+    Eigen::Map<Eigen::VectorXd> coefficients(alpha.data(), n);
+    coefficients = Abar.partialPivLu().solve(-dRR);
 
     return;
   }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "correlated_atoms.h"
+#include "../matrix_types.h"
 
 #include <vector>
 #include <string>
@@ -22,8 +23,8 @@ namespace DFT_output
       void evaluate_ovlp_k(const int ik, atoms_info& atom);
 
       //Interface
-      std::vector<std::complex<double>>& ovlp_mat(){return this->ovlp_matrix_k;}
-      std::vector<std::complex<double>>& local_ovlp(){return this->ovlp_localorb_k;}
+      DFT_plus_DMFT::Matrix& ovlp_mat(){return this->ovlp_matrix_k;}
+      DFT_plus_DMFT::Matrix& local_ovlp(){return this->ovlp_localorb_k;}
 
 
       private:
@@ -40,14 +41,14 @@ namespace DFT_output
       std::vector<std::vector<int>> col_indices;   //col_indices[ncells][N]
       std::vector<std::vector<int>> row_indptr;    //row_indptr[ncells][nbasis+1]
 
-      //ovlp_matrix_k[nbasis*n_DNFT_orb];
-      std::vector<std::complex<double>> ovlp_matrix_k;
+      // nbasis x n_DMFT_orb
+      DFT_plus_DMFT::Matrix ovlp_matrix_k;
 
-      //ovlp_localorb_k[n_DNFT_orb*n_DNFT_orb];
-      std::vector<std::complex<double>> ovlp_localorb_k;
+      // n_DMFT_orb x n_DMFT_orb
+      DFT_plus_DMFT::Matrix ovlp_localorb_k;
 
-      //dimension:nabsis*nabsis; ovlp_matrix_k[nbasis*nbasis];
-      // std::vector<std::complex<double>> ovlp_matrix_work;
+      // nbasis x nbasis
+      // DFT_plus_DMFT::Matrix ovlp_matrix_work;
     };
   }
 }

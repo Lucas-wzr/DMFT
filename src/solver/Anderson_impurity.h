@@ -1,4 +1,5 @@
 #pragma once
+#include "../matrix_types.h"
 
 #include "self_energy.h"
 #include "../para/KS_bands.h"
@@ -96,16 +97,16 @@ namespace DMFT
     // interfaces
     std::vector<double>& delta_scf(){return scf_delta;}
 
-    std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>&
+    std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>&
         Matsubara_Gf(){return Green_fun_omega;}
 
-    std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>&
+    std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>&
         Matsubara_Gf_save(){return Green_fun_omega_save;}
 
-    std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>&
+    std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>&
         Weiss(){return Weiss_omega;}
 
-    std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>& 
+    std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>&
         hybdization_tau(const int impurity_solver);
 
     public: //static member function
@@ -123,23 +124,23 @@ namespace DMFT
 
     bool alpha_initialized;
 
-    //Current step, impurity_level[ineq][is][m_index]
-    std::vector<std::vector<std::vector<std::complex<double>>>> impurity_level;
+    //Current step, impurity_level[ineq][is].data()[m_index]
+    std::vector<std::vector<DFT_plus_DMFT::Matrix>> impurity_level;
 
-    //hyb_omega[ineq][is][iomega][m_index]
-    std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>> hyb_omega;
+    //hyb_omega[ineq][is][iomega].data()[m_index]
+    std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>> hyb_omega;
 
-    //Weiss_omega[ineq][is][iomega][m_index]
-    std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>> Weiss_omega;
+    //Weiss_omega[ineq][is][iomega].data()[m_index]
+    std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>> Weiss_omega;
 
-    //Weiss_tau[ineq][is][itau][m_index]
-    std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>> Weiss_tau;
+    //Weiss_tau[ineq][is][itau].data()[m_index]
+    std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>> Weiss_tau;
 
-    //Green_fun_omega[ineq][is][iomega][m_index]
-    std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>> Green_fun_omega;
+    //Green_fun_omega[ineq][is][iomega].data()[m_index]
+    std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>> Green_fun_omega;
 
-    //Green_fun_omega_save[ineq][is][iomega][m_index]
-    std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>> Green_fun_omega_save;
+    //Green_fun_omega_save[ineq][is][iomega].data()[m_index]
+    std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>> Green_fun_omega_save;
 
     std::vector<double> scf_delta;
 

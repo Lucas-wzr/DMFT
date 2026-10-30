@@ -16,15 +16,17 @@
 #include <cstdlib>   //Use exit function
 #include <unistd.h>
 
+using DFT_plus_DMFT::Matrix;
+
 namespace DMFT
 {
   void ALPS_CTHYB_SEGMENT::output(
         const int char_step, const int DMFT_step, 
         const double mu, DMFT::input_info& in, 
         DFT_output::atoms_info& atom, DFT_output::KS_bands& band,
-        std::vector<std::vector<std::vector<std::complex<double>>>>& Eimp,
-        std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>& Sigma_in,
-        std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>& Weiss)
+        std::vector<std::vector<DFT_plus_DMFT::Matrix>>& Eimp,
+        std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>& Sigma_in,
+        std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>& Weiss)
   {
     //======================================================
     //        energy unit: eV
@@ -78,16 +80,16 @@ namespace DMFT
       const int iatom = atom.ineq_iatom(ineq);
       const int m_tot=norb_sub[iatom];
 
-      std::vector<std::vector<std::vector<std::complex<double>>>>& 
+      std::vector<std::vector<DFT_plus_DMFT::Matrix>>&
             hyb_taua = this->hyb_tau[ineq];
       
-      std::vector<std::vector<std::complex<double>>>&
+      std::vector<DFT_plus_DMFT::Matrix>&
             hoppinga = Eimp[ineq];
       
-      std::vector<std::vector<std::vector<std::complex<double>>>>&
+      std::vector<std::vector<DFT_plus_DMFT::Matrix>>&
             Sigma_ina = Sigma_in[ineq];
 
-      std::vector<std::vector<std::vector<std::complex<double>>>>& 
+      std::vector<std::vector<DFT_plus_DMFT::Matrix>>&
             Weissa = Weiss[ineq];
 
       std::stringstream site_dir_ss;
@@ -146,10 +148,10 @@ namespace DMFT
           {
             if(nspin==2)
               ofs_delta << std::setw(22) << std::fixed << std::setprecision(15) << 
-              std::pow(GLC::Hartree_to_eV,2)*hyb_taua[is][itau][m*m_tot+m].real();
+              std::pow(GLC::Hartree_to_eV,2)*hyb_taua[is][itau](m, m).real();
             else
               ofs_delta << std::setw(22) << std::fixed << std::setprecision(15) << 
-              std::pow(GLC::Hartree_to_eV,2)*hyb_taua[0][itau][m*m_tot+m].real();
+              std::pow(GLC::Hartree_to_eV,2)*hyb_taua[0][itau](m, m).real();
           }//m_index
         }
 
@@ -169,10 +171,10 @@ namespace DMFT
         {
           if(nspin==2)
             ofs_hopping << std::left << std::fixed << std::setprecision(15) 
-            << GLC::Hartree_to_eV*(mu-hoppinga[is][m*m_tot+m].real()) << ' ';
+            << GLC::Hartree_to_eV*(mu-hoppinga[is](m, m).real()) << ' ';
           else
             ofs_hopping << std::left << std::fixed << std::setprecision(15) 
-            << GLC::Hartree_to_eV*(mu-hoppinga[0][m*m_tot+m].real()) << ' ';
+            << GLC::Hartree_to_eV*(mu-hoppinga[0](m, m).real()) << ' ';
         }
       }
       ofs_hopping << '\n';
@@ -193,15 +195,15 @@ namespace DMFT
       //       if(nspin==1)
       //         ofs_G0 << std::setw(5) << iomega << std::setw(3) << is << std::setw(3) << m
       //                << std::setw(22) << std::fixed << std::setprecision(15) 
-      //                << Weissa[0][iomega][m*m_tot+m].real()/GLC::Hartree_to_eV << " "
+      //                << Weissa[0][iomega](m, m).real()/GLC::Hartree_to_eV << " "
       //                << std::setw(22) << std::fixed << std::setprecision(15) 
-      //                << Weissa[0][iomega][m*m_tot+m].imag()/GLC::Hartree_to_eV << '\n' ;
+      //                << Weissa[0][iomega](m, m).imag()/GLC::Hartree_to_eV << '\n' ;
       //       else
       //         ofs_G0 << std::setw(5) << iomega << std::setw(3) << is << std::setw(3) << m
       //                << std::setw(22) << std::fixed << std::setprecision(15) 
-      //                << Weissa[is][iomega][m*m_tot+m].real()/GLC::Hartree_to_eV << " "
+      //                << Weissa[is][iomega](m, m).real()/GLC::Hartree_to_eV << " "
       //                << std::setw(22) << std::fixed << std::setprecision(15) 
-      //                << Weissa[is][iomega][m*m_tot+m].imag()/GLC::Hartree_to_eV << '\n' ;   
+      //                << Weissa[is][iomega](m, m).imag()/GLC::Hartree_to_eV << '\n' ;
       //     }//m
       //   }//is
       // }//iomega
@@ -225,14 +227,14 @@ namespace DMFT
           {
             if(nspin==1)
               ofs_Sig << std::setw(22) << std::fixed << std::setprecision(15) 
-                     << Sigma_ina[0][iomega][m*m_tot+m].real()*GLC::Hartree_to_eV
+                     << Sigma_ina[0][iomega](m, m).real()*GLC::Hartree_to_eV
                      << std::setw(22) << std::fixed << std::setprecision(15) 
-                     << Sigma_ina[0][iomega][m*m_tot+m].imag()*GLC::Hartree_to_eV;
+                     << Sigma_ina[0][iomega](m, m).imag()*GLC::Hartree_to_eV;
             else
               ofs_Sig << std::setw(22) << std::fixed << std::setprecision(15) 
-                     << Sigma_ina[is][iomega][m*m_tot+m].real()*GLC::Hartree_to_eV
+                     << Sigma_ina[is][iomega](m, m).real()*GLC::Hartree_to_eV
                      << std::setw(22) << std::fixed << std::setprecision(15) 
-                     << Sigma_ina[is][iomega][m*m_tot+m].imag()*GLC::Hartree_to_eV ;      
+                     << Sigma_ina[is][iomega](m, m).imag()*GLC::Hartree_to_eV ;
           }//m
         }//is
         ofs_Sig << std::endl;
@@ -249,15 +251,9 @@ namespace DMFT
           DFT_output::KS_bands& band,
           DMFT::input_info& in, 
           DFT_output::atoms_info& atom,
-          std::vector<std::vector<std::
-          vector<std::vector<
-          std::complex<double>>>>>& hyb_save,
-          std::vector<std::vector<std::
-          vector<std::vector<
-          std::complex<double>>>>>& Gf_qmc,
-          std::vector<std::vector<std::
-          vector<std::vector<
-          std::complex<double>>>>>& Gf_save)
+          std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>& hyb_save,
+          std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>& Gf_qmc,
+          std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>& Gf_save)
   {
     debug::codestamp("ALPS_CTHYB_SEGMENT::read_last_step");
 
@@ -281,7 +277,7 @@ namespace DMFT
       this->hopping_matrix[ineq].resize(nspin);
       for(int is=0; is<nspin; is++)
       {
-        this->hopping_matrix[ineq][is].resize(m_tot*m_tot);
+        this->hopping_matrix[ineq][is].setZero(m_tot, m_tot);
       }//is
     }//ineq
 
@@ -306,16 +302,16 @@ namespace DMFT
       site_dir_ss << "/impurity" << ineq;
       std::string site_dir= site_dir_ss.str();
       
-      std::vector<std::vector<std::complex<double>>>&
+      std::vector<DFT_plus_DMFT::Matrix>&
             hoppinga = this->hopping_matrix[ineq];
 
-      std::vector<std::vector<std::vector<std::complex<double>>>>&
+      std::vector<std::vector<DFT_plus_DMFT::Matrix>>&
             Gf_savea = Gf_save[ineq];
 
-      std::vector<std::vector<std::vector<std::complex<double>>>>&
+      std::vector<std::vector<DFT_plus_DMFT::Matrix>>&
             Gf_qmca = Gf_qmc[ineq];
 
-      std::vector<std::vector<std::vector<std::complex<double>>>>&
+      std::vector<std::vector<DFT_plus_DMFT::Matrix>>&
             hyb_savea =hyb_save[ineq];
                   
       for(int is=0; is<nspin; is++)
@@ -331,7 +327,7 @@ namespace DMFT
         //===========================================
         //    Read hopping matrix
         //===========================================
-        std::vector<std::complex<double>>&
+        Matrix&
             hoppingb = hoppinga[is];
 
         std::string hopping_file = current_dir+"/hopping.txt";
@@ -353,9 +349,9 @@ namespace DMFT
           ifs_Tij >> imag;
           ifs_Tij.ignore(150,'\n');
 
-          hoppingb[m1*m_tot+m2] = std::complex<double>(real,imag);
+          hoppingb(m1, m2) = std::complex<double>(real,imag);
 
-          hoppingb[m1*m_tot+m2] /= GLC::Hartree_to_eV;   //eV to Hartree
+          hoppingb(m1, m2) /= GLC::Hartree_to_eV;   //eV to Hartree
 
           if(ifs_Tij.eof()) break;//Check whether end of file is reached       
         }
@@ -364,7 +360,7 @@ namespace DMFT
         //=================================================
         //    Read interacting Green function of last step
         //=================================================
-        std::vector<std::vector<std::complex<double>>>& 
+        std::vector<Matrix>&
             Gf_qmcb = Gf_qmca[is];
 
         std::string Gf_file = current_dir+"/G_omega.dat";
@@ -390,7 +386,7 @@ namespace DMFT
           ifs_gf >> imag;
           ifs_gf.ignore(150,'\n');
 
-          Gf_qmcb[iomega][m1*m_tot+m2] = GLC::Hartree_to_eV*std::complex<double>(real,imag);
+          Gf_qmcb[iomega](m1, m2) = GLC::Hartree_to_eV*std::complex<double>(real,imag);
 
           if(ifs_gf.eof()) break;//Check whether end of file is reached       
         }
@@ -399,7 +395,7 @@ namespace DMFT
         //=============================================
         //    Read input Green function of last step
         //=============================================
-        std::vector<std::vector<std::complex<double>>>&
+        std::vector<Matrix>&
             Gf_saveb = Gf_savea[is];
 
         std::string Gf_save_file = current_dir+"/Gf.in";
@@ -422,7 +418,7 @@ namespace DMFT
           ifs_gfsave >> imag;
           ifs_gfsave.ignore(150,'\n');
 
-          Gf_saveb[iomega][m1*m_tot+m2] = std::complex<double>(real,imag);
+          Gf_saveb[iomega](m1, m2) = std::complex<double>(real,imag);
 
           if(ifs_gfsave.eof()) break; //Check whether end of file is reached
         }
@@ -431,7 +427,7 @@ namespace DMFT
         //===================================================
         //    Read input hybridization function of last step
         //===================================================
-        std::vector<std::vector<std::complex<double>>>&
+        std::vector<Matrix>&
             hyb_saveb = hyb_savea[is];
 
         std::string hyb_save_file = current_dir+"/hybridization.in";
@@ -454,7 +450,7 @@ namespace DMFT
           ifs_hybsave >> imag;
           ifs_hybsave.ignore(150,'\n');
 
-          hyb_saveb[iomega][m1*m_tot+m2] = std::complex<double>(real,imag);
+          hyb_saveb[iomega](m1, m2) = std::complex<double>(real,imag);
 
           if(ifs_hybsave.eof()) break; //Check whether end of file is reached       
         }

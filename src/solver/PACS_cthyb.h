@@ -4,6 +4,7 @@
 //    The energy unit used is eV
 //=================================================================
 #pragma once
+#include "../matrix_types.h"
 
 #include "../para/KS_bands.h"
 #include "../para/correlated_atoms.h"
@@ -31,23 +32,21 @@ namespace DMFT
           DFT_output::KS_bands& band,
           DMFT::input_info& in, 
           DFT_output::atoms_info& atom,
-          std::vector<std::vector<std::
-          vector<std::vector<
-          std::complex<double>>>>>& Sw);
+          std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>& Sw);
 
     void output(const int char_step, const int DMFT_step,
           const double mu, DMFT::input_info& in, 
           DFT_output::atoms_info& atom, DFT_output::KS_bands& band, const std::vector<double>& freq,
-          std::vector<std::vector<std::vector<std::complex<double>>>>& Eimp,
-          std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>& hyb_omega);
+          std::vector<std::vector<DFT_plus_DMFT::Matrix>>& Eimp,
+          std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>& hyb_omega);
 
     //Interfaces
-    std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>&
+    std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>&
         hybridization_func_tau(){return hyb_tau;}
 
     private:
     //hyb_tau[ineq][is][i_tau][m_index];
-    std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>> hyb_tau;
+    std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>> hyb_tau;
 
   };
 }

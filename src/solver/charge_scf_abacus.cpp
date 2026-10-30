@@ -108,7 +108,7 @@ bool Charge_SCF_abacus::update(solver& task, int charge_step)
     for(int a=0;a<natom;a++){
         const int norb=atom.iatom_norb()[a];
         for(int iw=0;iw<n_omega;iw++)
-            Sigma_local[a][iw]=Eigen::Map<const Matrix>(local[atom.equ_atom(a)][0][iw].data(),norb,norb);
+            Sigma_local[a][iw]=local[atom.equ_atom(a)][0][iw];
     }
     std::vector<int> k_indices;
     std::vector<std::vector<Matrix>> Sigma_k;
@@ -116,8 +116,7 @@ bool Charge_SCF_abacus::update(solver& task, int charge_step)
         if(ik%mpi_ntasks()!=mpi_rank()) continue;
         auto P=std::vector<Matrix>(natom);
         for(int a=0;a<natom;a++)
-            P[a]=Eigen::Map<const Matrix>(task.proj.proj_access(k_indices.size())[a][0].data(),
-                                         n_band_window,atom.iatom_norb()[a]);
+            P[a]=task.proj.proj_access(k_indices.size())[a][0];
         k_indices.push_back(ik);
         Sigma_k.push_back(lattice::self_energy(n_band_window,n_omega,P,Sigma_local));
     }
@@ -156,9 +155,9 @@ bool Charge_SCF_abacus::update(solver& task, int charge_step)
         int ik=k_indices[j];
         auto DM_window=density_matrix::density_matrix_window(task.space.eigen_val()[0][ik],Sigma_k[j],beta,mu);
         DFT_output::KS_eigenvectors wfc;
-        std::vector<std::vector<std::complex<double>>> C;
+        std::vector<Matrix> C;
         wfc.read_eigenvec("dft/outputs_to_DMFT/KS_eigenvector/",ik,C);
-        const Eigen::Map<const Matrix> Cm(C[0].data(),wfc.basis_n(),band.nband());
+        const Matrix& Cm=C[0];
         Matrix DMK=density_matrix::density_matrix_NAO(Cm,band.enk()[0][ik],window,DM_window,beta,mu);
         Matrix S=Matrix::Zero(wfc.basis_n(),wfc.basis_n());
         for(int ir=0;ir<int(R4ovlp.size());ir++){

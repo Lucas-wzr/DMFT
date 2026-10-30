@@ -43,6 +43,8 @@ namespace
     }
 }
 
+using DFT_plus_DMFT::Matrix;
+
 namespace DMFT
 {
     void ComCTQMC::write_input(const std::string& directory,double beta,double mu,
@@ -104,8 +106,8 @@ namespace DMFT
 
     void ComCTQMC::output(int charge_step,int dmft_step,double mu,input_info& in,
         DFT_output::atoms_info& atom,DFT_output::KS_bands& band,
-        const std::vector<std::vector<std::vector<std::complex<double>>>>& Eimp,
-        const std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>& hyb,
+        const std::vector<std::vector<DFT_plus_DMFT::Matrix>>& Eimp,
+        const std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>& hyb,
         coulomb_tensor& Umat)
     {
         executable=*(const std::string*)in.parameter("comctqmc_exe");
@@ -129,8 +131,8 @@ namespace DMFT
             for(int s=0;s<2;s++) for(int m=0;m<M;m++)
             {
                 int spin=nspin==1 ? 0 : s;
-                levels[s*M+m]=Eimp[q][spin][m*M+m].real();
-                for(int n=0;n<N;n++) delta[s*M+m][n]=hyb[q][spin][n][m*M+m];
+                levels[s*M+m]=Eimp[q][spin](m, m).real();
+                for(int n=0;n<N;n++) delta[s*M+m][n]=hyb[q][spin][n](m, m);
             }
             const std::string directory=paths.back()+"/impurity"+std::to_string(q)+"/comctqmc";
             const std::string impurity=paths.back()+"/impurity"+std::to_string(q);
@@ -220,7 +222,7 @@ namespace DMFT
 
     void ComCTQMC::read_self_energy(int charge_step,int dmft_step,DFT_output::KS_bands& band,
         input_info& in,DFT_output::atoms_info& atom,
-        std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>& S)
+        std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>& S)
     {
         try {
             const int nspin=band.nspins(),N=*(int*)in.parameter("n_omega");
@@ -245,10 +247,10 @@ namespace DMFT
                         else sd[m]=s[spin*M+m][n];
                     }
                     DFT_output::atoms_info::symmetry_operation_vector(atom.local_sym(),atom.L(iatom),M,sd.data());
-                    std::fill(S[q][spin][n].begin(),S[q][spin][n].end(),0.0);
+                    S[q][spin][n].setZero();
                     for(int m=0;m<M;m++)
                     {
-                        S[q][spin][n][m*M+m]=sd[m];
+                        S[q][spin][n](m, m)=sd[m];
                     }
                 }
             }

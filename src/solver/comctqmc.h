@@ -1,4 +1,5 @@
 #pragma once
+#include "../matrix_types.h"
 #include "coulomb_tensor.h"
 #include "../para/input.h"
 #include <complex>
@@ -17,8 +18,8 @@ namespace DMFT
 
         void output(int charge_step, int dmft_step, double mu, input_info& in,
             DFT_output::atoms_info& atom, DFT_output::KS_bands& band,
-            const std::vector<std::vector<std::vector<std::complex<double>>>>& Eimp,
-            const std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>& hyb,
+            const std::vector<std::vector<DFT_plus_DMFT::Matrix>>& Eimp,
+            const std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>& hyb,
             coulomb_tensor& Umat);
 
         void run(const std::string& directory, const std::string& executable,
@@ -34,7 +35,7 @@ namespace DMFT
 
         void read_self_energy(int charge_step, int dmft_step, DFT_output::KS_bands& band,
             input_info& in, DFT_output::atoms_info& atom,
-            std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>& S);
+            std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>& S);
 
         private:
         std::string executable="CTQMC", evalsim="EVALSIM", launcher="comctqmc-launch";

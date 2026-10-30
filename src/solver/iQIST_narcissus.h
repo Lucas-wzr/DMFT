@@ -2,6 +2,7 @@
 //    Only density-density interaction
 //=================================================================
 #pragma once
+#include "../matrix_types.h"
 
 #include "../para/KS_bands.h"
 #include "../para/correlated_atoms.h"
@@ -30,15 +31,13 @@ namespace DMFT
           DFT_output::KS_bands& band,
           DMFT::input_info& in, 
           DFT_output::atoms_info& atom,
-          std::vector<std::vector<std::
-          vector<std::vector<
-          std::complex<double>>>>>& Sw);
+          std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>& Sw);
 
     void output(const int char_step, const int DMFT_step, 
           const double mu, DMFT::input_info& in, 
           DFT_output::atoms_info& atom, DFT_output::KS_bands& band, const std::vector<double>& freq,
-          std::vector<std::vector<std::vector<std::complex<double>>>>& Eimp,
-          std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>& hyb_omega,
+          std::vector<std::vector<DFT_plus_DMFT::Matrix>>& Eimp,
+          std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>& hyb_omega,
           DMFT::coulomb_tensor& Umat );
 
     void write_solver_ctqmc_in(
@@ -47,7 +46,7 @@ namespace DMFT
 
     void write_solver_eimp_in(
          const std::string file, 
-         std::vector<std::vector<std::complex<double>>>& muvec,
+         std::vector<DFT_plus_DMFT::Matrix>& muvec,
          const int nband,const int symm,
          const int corr_L, const int nspin);
 
@@ -57,12 +56,12 @@ namespace DMFT
          std::vector<double>>>>& Umat );
 
     //Interfaces
-    std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>&
+    std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>&
         hybridization_func_tau(){return hyb_tau;}
 
     private:
     //hyb_tau[ineq][is][i_tau][m_index];
-    std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>> hyb_tau;
+    std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>> hyb_tau;
 
   };
 }

@@ -7,6 +7,7 @@
 #include "projector.h"
 #include "Hilbert_space.h"
 
+#include <Eigen/Core>
 #include <complex>
 #include <vector>
 
@@ -98,7 +99,7 @@ double evaluate_electrons_number_imag_fit(
 
     std::vector<std::vector<std::vector<double>>> fik_wind;       //fik_wind[is][ik][iband]
 
-    std::vector<std::vector<std::vector<double>>> epsilon_infty;  //epsilon_infty[is][ik][iband]
+    std::vector<std::vector<Eigen::VectorXd>> epsilon_infty;  //epsilon_infty[is][ik][iband]
 
   };
 }

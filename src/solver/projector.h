@@ -5,6 +5,7 @@
 #include "../para/correlated_atoms.h"
 #include "../para/KS_bands.h"
 #include "Hilbert_space.h"
+#include "../matrix_types.h"
 
 #include <complex>
 #include <vector>
@@ -42,8 +43,8 @@ namespace DFT_plus_DMFT
     //===========================
     //   interface
     //===========================
-    std::vector<std::vector<std::vector<std::complex<double>>>>& 
-          proj_access(const int ik){return projector_mat[ik];}
+    const std::vector<std::vector<Matrix>>&
+          proj_access(const int ik) const {return projector_mat[ik];}
     
     std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>&
           Hloc(){return TB_Hk;}
@@ -53,11 +54,11 @@ namespace DFT_plus_DMFT
     private:
     int n_basis;
 
-    //projector_mat[ik][iatom][nspin][nbands*m_tot];
-    std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>> projector_mat;
+    //projector_mat[ik][iatom][is]: nbands x m_tot
+    std::vector<std::vector<std::vector<Matrix>>> projector_mat;
   
-    //unitary_trans[ik][iatom][nspin][m_tot*m_tot];
-    std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>> unitary_trans;
+    //unitary_trans[ik][iatom][is]: m_tot x m_tot
+    std::vector<std::vector<std::vector<Matrix>>> unitary_trans;
     //Tight binding Haimiltonian:TB_Hk[ik][iatom][nspin][m_tot];
     std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>> TB_Hk;
     

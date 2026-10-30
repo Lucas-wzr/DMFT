@@ -22,14 +22,16 @@
 
 void Rutgers_run();
 
+using DFT_plus_DMFT::Matrix;
+
 namespace DMFT
 {
   void Rutgers_CTHYB::output(
         const int char_step, const int DMFT_step, 
         const double mu, DMFT::input_info& in, 
         DFT_output::atoms_info& atom, DFT_output::KS_bands& band, const std::vector<double>& freq,
-        std::vector<std::vector<std::vector<std::complex<double>>>>& Eimp,
-        std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>& hyb_omega,
+        std::vector<std::vector<DFT_plus_DMFT::Matrix>>& Eimp,
+        std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>& hyb_omega,
         DMFT::coulomb_tensor& Umat)
   {
     //======================================================
@@ -89,16 +91,16 @@ namespace DMFT
       const int iatom = atom.ineq_iatom(ineq);
       const int m_tot=norb_sub[iatom];
 
-      const std::vector<std::vector<std::vector<std::complex<double>>>>& 
+      const std::vector<std::vector<DFT_plus_DMFT::Matrix>>&
             hyb = hyb_omega[ineq];
       
-      std::vector<std::vector<std::complex<double>>>
+      std::vector<DFT_plus_DMFT::Matrix>
             Eimpa = Eimp[ineq];
 
       const std::vector<std::vector<std::vector<std::vector<double>>>>&
             Utensor = Umat.Coulomb_matrix()[ineq];
       
-      // const std::vector<std::vector<std::vector<std::complex<double>>>>&
+      // const std::vector<std::vector<DFT_plus_DMFT::Matrix>>&
       //       Sigma_ina = Sigma_in[ineq];
 
 
@@ -128,7 +130,7 @@ namespace DMFT
       {
         for(int m=0; m<m_tot; m++)
         {
-          average_Eimp += Eimpa[is][m*m_tot+m].real();
+          average_Eimp += Eimpa[is](m, m).real();
           count++;
         }
       }
@@ -136,7 +138,7 @@ namespace DMFT
 
       for(int is=0; is<nspin; is++)
         for(int m=0; m<m_tot; m++)
-          Eimpa[is][m*m_tot+m] -= average_Eimp;
+          Eimpa[is](m, m) -= average_Eimp;
 
       this->write_params(in, current_dir+"/PARAMS", mu-average_Eimp);
 
@@ -168,14 +170,14 @@ namespace DMFT
       //     {
       //       if(nspin==1)
       //         ofs_Sig << std::setw(22) << std::fixed << std::setprecision(15) 
-      //                << Sigma_ina[0][iomega][m*m_tot+m].real()*GLC::Hartree_to_eV
+      //                << Sigma_ina[0][iomega](m, m).real()*GLC::Hartree_to_eV
       //                << std::setw(22) << std::fixed << std::setprecision(15) 
-      //                << Sigma_ina[0][iomega][m*m_tot+m].imag()*GLC::Hartree_to_eV;
+      //                << Sigma_ina[0][iomega](m, m).imag()*GLC::Hartree_to_eV;
       //       else
       //         ofs_Sig << std::setw(22) << std::fixed << std::setprecision(15) 
-      //                << Sigma_ina[is][iomega][m*m_tot+m].real()*GLC::Hartree_to_eV
+      //                << Sigma_ina[is][iomega](m, m).real()*GLC::Hartree_to_eV
       //                << std::setw(22) << std::fixed << std::setprecision(15) 
-      //                << Sigma_ina[is][iomega][m*m_tot+m].imag()*GLC::Hartree_to_eV ;
+      //                << Sigma_ina[is][iomega](m, m).imag()*GLC::Hartree_to_eV ;
       //     }//m_index
       //   }//is
       //   ofs_Sig << '\n';
@@ -224,8 +226,7 @@ namespace DMFT
   void Rutgers_CTHYB::write_delta_omega(DMFT::input_info& in, 
           const std::string file, const int nspin, const int nomega,
           const int m_tot, const std::vector<double>& freq,
-          const std::vector<std::vector<
-          std::vector<std::complex<double>>>>& hyb_omega)
+          const std::vector<std::vector<DFT_plus_DMFT::Matrix>>& hyb_omega)
   {
     debug::codestamp("Rutgers_CTHYB::write_params");
 
@@ -241,14 +242,14 @@ namespace DMFT
         {
           if(nspin==1)
             ofs << std::setw(22) << std::fixed << std::setprecision(15)
-            << GLC::Hartree_to_eV*hyb_omega[0][iomega][m*m_tot+m].real() 
+            << GLC::Hartree_to_eV*hyb_omega[0][iomega](m, m).real()
             << std::setw(22) << std::fixed << std::setprecision(15) 
-            << GLC::Hartree_to_eV*hyb_omega[0][iomega][m*m_tot+m].imag();
+            << GLC::Hartree_to_eV*hyb_omega[0][iomega](m, m).imag();
           else
             ofs << std::setw(22) << std::fixed << std::setprecision(15)
-            << GLC::Hartree_to_eV*hyb_omega[is][iomega][m*m_tot+m].real()
+            << GLC::Hartree_to_eV*hyb_omega[is][iomega](m, m).real()
             << std::setw(22) << std::fixed << std::setprecision(15) 
-            << GLC::Hartree_to_eV*hyb_omega[is][iomega][m*m_tot+m].imag();     
+            << GLC::Hartree_to_eV*hyb_omega[is][iomega](m, m).imag();
         }//m
       }//is
       ofs << '\n';
@@ -259,7 +260,7 @@ namespace DMFT
   }
 
   void Rutgers_CTHYB::write_cix(const int nspin, const int m_tot, const std::string file, 
-          const std::vector<std::vector<std::complex<double>>>& Esplit,
+          const std::vector<DFT_plus_DMFT::Matrix>& Esplit,
           const std::vector<std::vector<std::vector<std::vector<double>>>>& Utensor)
   {
     debug::codestamp("Rutgers_CTHYB::write_cix");
@@ -267,7 +268,7 @@ namespace DMFT
     std::vector<double> levels(2*m_tot);
     for(int is=0; is<2; is++)
       for(int m=0; m<m_tot; m++)
-        levels[is*m_tot+m] = Esplit[nspin==1 ? 0 : is][m*m_tot+m].real();
+        levels[is*m_tot+m] = Esplit[nspin==1 ? 0 : is](m, m).real();
 
     try
     {
@@ -289,9 +290,7 @@ namespace DMFT
         DFT_output::KS_bands& band,
         DMFT::input_info& in, 
         DFT_output::atoms_info& atom,
-        std::vector<std::vector<std::
-        vector<std::vector<
-        std::complex<double>>>>>& Sw)
+        std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>& Sw)
   {
     debug::codestamp("Rutgers_CTHYB::read_last_step");
 
@@ -326,10 +325,10 @@ namespace DMFT
       site_dir_ss << "/impurity" << ineq;
       std::string site_dir= site_dir_ss.str();
 
-      // std::vector<std::vector<std::vector<std::complex<double>>>>&
+      // std::vector<std::vector<DFT_plus_DMFT::Matrix>>&
       //       Sw_savea = Sw_save[ineq];
       
-      std::vector<std::vector<std::vector<std::complex<double>>>>&
+      std::vector<std::vector<DFT_plus_DMFT::Matrix>>&
             Swa = Sw[ineq];
 
       std::stringstream current_dir_ss;
@@ -459,7 +458,7 @@ namespace DMFT
 
       //   for(int is=0; is<nspin; is++)
       //     for(int m=0; m<m_tot; m++)
-      //       Sw_savea[is][count][m*m_tot+m] = 
+      //       Sw_savea[is][count](m, m) =
       //         std::complex<double>(Gw_real[is][m],Gw_im[is][m])/GLC::Hartree_to_eV;
 
       //   count++;
@@ -534,7 +533,7 @@ namespace DMFT
 
         for(int is=0; is<nspin; is++)
           for(int m=0; m<m_tot; m++)
-            Swa[is][count][m*m_tot+m] = 
+            Swa[is][count](m, m) =
             std::complex<double>(Gw_real[is][m],Gw_im[is][m])/GLC::Hartree_to_eV;
 
         count++;

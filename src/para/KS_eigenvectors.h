@@ -4,6 +4,7 @@
 #include <complex>
 #include <vector>
 #include "../solver/Hilbert_space.h"
+#include "../matrix_types.h"
 
 namespace DFT_output
 {
@@ -16,27 +17,24 @@ namespace DFT_output
     bool read_eigenvec(
           const std::string dir,
           const int ik,
-          std::vector<std::vector<
-          std::complex<double>>>& eigenvector );
+          std::vector<DFT_plus_DMFT::Matrix>& eigenvector );
 
     bool read_corr_subset(
           const std::string dir, 
           const int ik,
           DFT_plus_DMFT::Hilbert_space& space,
-          std::vector<std::vector<
-          std::complex<double>>>& eigenvector );
+          std::vector<DFT_plus_DMFT::Matrix>& eigenvector );
 
     bool read_DMFT_occ_subset(
           const std::string dir, 
           const int ik,
           DFT_plus_DMFT::Hilbert_space& space,
-          std::vector<std::vector<
-          std::complex<double>>>& eigenvector );
+          std::vector<DFT_plus_DMFT::Matrix>& eigenvector );
 
     void evalute_k_wave_c_mat(
-      std::complex<double>* wave_c_mat, const int is,
+      DFT_plus_DMFT::Matrix& wave_c_mat, const int is,
       const int iband1, const int iband2,
-      std::vector<std::vector<std::complex<double>>>& eigenvector);
+      const std::vector<DFT_plus_DMFT::Matrix>& eigenvector);
 
     //=================
     //  interfaces
@@ -63,7 +61,7 @@ namespace DFT_output
 
 
     //eigen_values[ispin][nbasis*nbands];
-    // std::vector<std::vector<std::complex<double>>> eigenvector;
+    // std::vector<Matrix> eigenvector;
 
   };
   

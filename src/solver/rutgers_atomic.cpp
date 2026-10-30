@@ -1,4 +1,5 @@
 #include "rutgers_atomic.h"
+#include <Eigen/Eigenvalues>
 
 #include <algorithm>
 #include <cmath>
@@ -11,8 +12,6 @@
 #include <stdexcept>
 #include <string>
 
-extern "C" void dsyev_(const char*, const char*, const int*, double*, const int*,
-                       double*, double*, const int*, int*);
 
 namespace DMFT
 {
@@ -211,30 +210,26 @@ namespace DMFT
         b.N = occupation(b.states[0]);
         b.Sz = spin(b.states[0],M);
         b.energy.resize(size);
-        b.eigenvectors.assign(size*size,0.0);
-        std::vector<double> matrix(size*size,0.0);
+        b.eigenvectors.setZero(size, size);
+        DFT_plus_DMFT::RealMatrix matrix = DFT_plus_DMFT::RealMatrix::Zero(size, size);
         for(int col=0; col<size; col++)
           for(const auto& entry : H[b.states[col]])
             if(block_index[entry.first] == block_index[b.states[0]])
-              matrix[state_index[entry.first]+col*size] = entry.second;
+              matrix(state_index[entry.first], col) = entry.second;
         if(size == 1)
         {
-          b.energy[0] = matrix[0];
-          b.eigenvectors[0] = 1.0;
+          b.energy[0] = matrix(0,0);
+          b.eigenvectors(0,0) = 1.0;
         }
         else
         {
-          const char vectors = 'V', triangle = 'U';
-          int info, lwork = -1;
-          double query;
-          dsyev_(&vectors,&triangle,&size,matrix.data(),&size,b.energy.data(),&query,&lwork,&info);
-          if(info != 0) throw std::runtime_error("LAPACK dsyev workspace query failed");
-          lwork = int(query);
-          std::vector<double> work(lwork);
-          dsyev_(&vectors,&triangle,&size,matrix.data(),&size,b.energy.data(),work.data(),&lwork,&info);
-          if(info != 0) throw std::runtime_error("Atomic eigensolver did not converge");
-          for(int row=0; row<size; row++)
-            for(int col=0; col<size; col++) b.eigenvectors[row*size+col] = matrix[row+col*size];
+          Eigen::SelfAdjointEigenSolver<DFT_plus_DMFT::RealMatrix> eig;
+          eig.compute(matrix.selfadjointView<Eigen::Upper>());
+          if(eig.info() != Eigen::Success)
+            throw std::runtime_error("Atomic eigensolver did not converge");
+          b.energy = eig.eigenvalues();
+          b.eigenvectors = eig.eigenvectors();
+
         }
         b.target.assign(L,-1);
         b.creation.resize(L);
@@ -253,7 +248,7 @@ namespace DMFT
           const auto& target = blocks[b.target[a]];
           const int target_size = target.states.size();
           auto& F = b.creation[a];
-          F.assign(size*target_size,0.0);
+          F.setZero(size, target_size);
           for(int row=0; row<size; row++)
           {
             int p = b.states[row], sign = 1;
@@ -261,7 +256,7 @@ namespace DMFT
             const int target_row = state_index[p];
             for(int i=0; i<size; i++)
               for(int j=0; j<target_size; j++)
-                F[i*target_size+j] += sign*b.eigenvectors[row*size+i]*target.eigenvectors[target_row*target_size+j];
+                F(i,j) += sign*b.eigenvectors(row,i)*target.eigenvectors(target_row,j);
           }
         }
       }
@@ -300,7 +295,9 @@ namespace DMFT
           else
           {
             out << i+1 << ' ' << b.target[a]+1 << ' ' << b.states.size() << ' ' << blocks[b.target[a]].states.size();
-            for(double value : b.creation[a]) out << ' ' << value;
+            for(int row=0; row<b.creation[a].rows(); row++)
+              for(int col=0; col<b.creation[a].cols(); col++)
+                out << ' ' << b.creation[a](row,col);
             out << '\n';
           }
         }

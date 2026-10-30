@@ -1,7 +1,8 @@
 #include "projector.h"
 #include "../mpi_environment.h"
 #include "../para/overlap_matrix.h"
-#include "math_zone.h"
+#include "../matrix_types.h"
+#include <Eigen/Dense>
 #include "../constants.h"
 #include "../global_variables.h"
 #include "../timer.h"
@@ -9,8 +10,6 @@
 
 #include <mpi.h>
 
-#define MKL_Complex16 std::complex<double>
-#include <mkl.h>
 
 //test
 #include <fstream>
@@ -60,63 +59,40 @@ namespace DFT_plus_DMFT
         [myid](const std::string& message,
                const int global_k,
                const int ispin,
-               const lapack_int info)
+               const int info)
     {
       std::cerr << "[projector fatal]"
                 << " rank=" << myid
                 << " global_k=" << global_k
                 << " spin=" << ispin
-                << " lapack_info=" << info
+                << " solver_info=" << info
                 << " : " << message << std::endl;
       MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
       std::abort();
     };
 
-    // Keep the legacy inverse-square-root algorithm local so every failure
-    // follows the MPI-wide projector error path instead of exiting one rank.
     const auto hermitian_sqrt_inverse =
-        [&](std::complex<double>* matrix,
-            double* eigenvalues,
-            std::complex<double>* work_matrix,
-            std::complex<double>* inverse_sqrt,
-            const int dimension,
+        [&](const Eigen::Ref<const Matrix>& matrix,
+            Matrix& inverse_sqrt,
             const int global_k,
             const int ispin,
             const std::string& label)
     {
-      const lapack_int info = LAPACKE_zheev(
-          LAPACK_ROW_MAJOR, 'V', 'U', dimension,
-          matrix, dimension, eigenvalues);
-      if(info != 0)
-        projector_abort(label + " eigensolver failed", global_k, ispin, info);
+      Eigen::SelfAdjointEigenSolver<Matrix> solver;
+      solver.compute(matrix.selfadjointView<Eigen::Upper>());
+      if(solver.info() != Eigen::Success)
+        projector_abort(label + " eigensolver failed", global_k, ispin, solver.info());
 
-      std::fill(inverse_sqrt,
-                inverse_sqrt + static_cast<std::size_t>(dimension)*dimension,
-                zero);
-      for(int i=0; i<dimension; i++)
-      {
+      const auto& eigenvalues = solver.eigenvalues();
+      for(int i=0; i<eigenvalues.size(); i++)
         if(!std::isfinite(eigenvalues[i]) || !(eigenvalues[i] > 0.0) ||
            std::fabs(eigenvalues[i]) < 1.0e-12)
           projector_abort(label + " is not positive definite",
                           global_k, ispin, 0);
-        inverse_sqrt[i*dimension+i] =
-            std::complex<double>(1.0/std::sqrt(eigenvalues[i]), 0.0);
-      }
 
-      cblas_zgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-                  dimension, dimension, dimension,
-                  &one,
-                  matrix, dimension,
-                  inverse_sqrt, dimension,
-                  &zero,
-                  work_matrix, dimension);
-      cblas_zgemm(CblasRowMajor, CblasNoTrans, CblasConjTrans,
-                  dimension, dimension, dimension,
-                  &one,
-                  work_matrix, dimension,
-                  matrix, dimension,
-                  &zero,
-                  inverse_sqrt, dimension);
+      inverse_sqrt = solver.eigenvectors()
+          * eigenvalues.array().sqrt().inverse().matrix().asDiagonal()
+          * solver.eigenvectors().adjoint();
     };
 
     if(projector_type != 1 && projector_type != 2)
@@ -191,11 +167,9 @@ namespace DFT_plus_DMFT
         this->unitary_trans[ik][iatom].resize(nspin);
         for(int is=0; is<nspin; is++)
         {
-          this->projector_mat[ik][iatom][is].assign(
-              static_cast<std::size_t>(wbands[is])*m_tot, zero);
+          this->projector_mat[ik][iatom][is] = Matrix::Zero(wbands[is], m_tot);
           this->TB_Hk[ik][iatom][is].assign(m_tot, zero);
-          this->unitary_trans[ik][iatom][is].assign(
-              static_cast<std::size_t>(m_tot)*m_tot, zero);
+          this->unitary_trans[ik][iatom][is] = Matrix::Zero(m_tot, m_tot);
         }
       }
     }
@@ -203,25 +177,10 @@ namespace DFT_plus_DMFT
     DFT_output::overlap_matrix ovlp(DFT_solver, "dft/outputs_to_DMFT/overlap_matrix");
     wave_function wfc;
 
-    std::vector<std::complex<double>> Lowdin(norb*norb);
-    std::vector<std::complex<double>> proj_mat_tmp(wbands_max*norb);
-    std::vector<std::complex<double>> mat_tmp(wbands_max*norb);
-    std::vector<std::complex<double>> norm_orth(norb*norb);
-    std::vector<std::complex<double>> sqrt_inver(norb*norb);
-    std::vector<std::complex<double>> work_mat(norb*norb);
-    std::vector<double> eigen_val(norb);
-
-    const std::size_t cwf_full_u_size = projector_type == 2
-        ? static_cast<std::size_t>(wbands_max)*wbands_max : 0;
-    const std::size_t cwf_thin_u_size = projector_type == 2
-        ? static_cast<std::size_t>(wbands_max)*norb : 0;
-    std::vector<std::complex<double>> U_full(cwf_full_u_size);
-    std::vector<std::complex<double>> U_thin(cwf_thin_u_size);
-    std::vector<std::complex<double>> VT(
-        projector_type == 2 ? static_cast<std::size_t>(norb)*norb : 0);
-    std::vector<double> singular_values(projector_type == 2 ? norb : 0);
-    std::vector<double> superb(
-        projector_type == 2 ? std::max(1, norb - 1) : 0);
+    Matrix Lowdin(norb, norb);
+    Matrix proj_mat_tmp, mat_tmp;
+    Matrix norm_orth(norb, norb);
+    Matrix sqrt_inver(norb, norb);
     std::vector<double> window_weight(projector_type == 2 ? wbands_max : 0);
 
     double cwf_energy_min_local = std::numeric_limits<double>::infinity();
@@ -232,7 +191,7 @@ namespace DFT_plus_DMFT
     double cwf_orth_max_local = 0.0;
     double cwf_hermitian_max_local = 0.0;
 
-    std::vector<std::vector<std::complex<double>>> eigenvec;
+    std::vector<Matrix> eigenvec;
     std::ofstream window_report("window_overlap_rank" + std::to_string(myid) + ".dat");
     if(!window_report)
       projector_abort("cannot open window overlap diagnostics", -1, -1, 0);
@@ -245,14 +204,12 @@ namespace DFT_plus_DMFT
     {
       // A contains overlaps of the KS window with Lowdin-orthonormal local orbitals.
       // Check coverage before normalization can hide weak or missing directions.
-      cblas_zgemm(CblasRowMajor, CblasConjTrans, CblasNoTrans,
-                  norb, norb, wbands[is], &one,
-                  mat_tmp.data(), norb, mat_tmp.data(), norb,
-                  &zero, norm_orth.data(), norb);
-      const lapack_int window_info = LAPACKE_zheev(
-          LAPACK_ROW_MAJOR, 'N', 'U', norb, norm_orth.data(), norb, eigen_val.data());
-      if(window_info != 0)
-        projector_abort("window overlap eigensolver failed", i_k_point, is, window_info);
+      norm_orth = mat_tmp.adjoint() * mat_tmp;
+      Eigen::SelfAdjointEigenSolver<Matrix> solver;
+      solver.compute(norm_orth.selfadjointView<Eigen::Upper>(), Eigen::EigenvaluesOnly);
+      if(solver.info() != Eigen::Success)
+        projector_abort("window overlap eigensolver failed", i_k_point, is, solver.info());
+      const auto& eigen_val = solver.eigenvalues();
       window_report << i_k_point << " " << is << " " << projection_min_weight;
       for(double value : eigen_val){
         if(!std::isfinite(value))
@@ -308,25 +265,23 @@ namespace DFT_plus_DMFT
 
       this->n_basis=wfc.basis_n();
       
-      const std::vector<std::complex<double>>& ovlp_mat = ovlp.overlap();
+      const Matrix& overlap_columns = ovlp.overlap();
 
-      std::vector<std::complex<double>>& ovlp_localorb = ovlp.overlap_localorb();
+      const Matrix& local_overlap = ovlp.overlap_localorb();
 
       if(this->n_basis <= 0 ||
          eigenvec.size() != static_cast<std::size_t>(nspin) ||
-         ovlp_mat.size() != static_cast<std::size_t>(this->n_basis)*norb ||
-         ovlp_localorb.size() != static_cast<std::size_t>(norb)*norb)
+         overlap_columns.rows() != this->n_basis || overlap_columns.cols() != norb ||
+         local_overlap.rows() != norb || local_overlap.cols() != norb)
         projector_abort("invalid projector matrix dimensions", i_k_point, -1, 0);
 
       hermitian_sqrt_inverse(
-          &ovlp_localorb[0], &eigen_val[0],
-          &work_mat[0], &Lowdin[0], norb,
+          local_overlap, Lowdin,
           i_k_point, -1, "local overlap matrix");
 
       for(int is=0; is<nspin; is++)
       {
-        if(eigenvec[is].size() !=
-           static_cast<std::size_t>(this->n_basis)*wbands[is])
+        if(eigenvec[is].rows() != this->n_basis || eigenvec[is].cols() != wbands[is])
           projector_abort("invalid KS-eigenvector dimensions", i_k_point, is, 0);
 
         // void cblas_zgemm (const CBLAS_LAYOUT Layout, const CBLAS_TRANSPOSE transa, const
@@ -371,38 +326,18 @@ namespace DFT_plus_DMFT
         ofs.close(); 
         */
 
-        cblas_zgemm(CblasRowMajor, CblasConjTrans, CblasNoTrans,
-                    wbands[is], norb, this->n_basis,
-                    &one,
-                    &eigenvec[is][0], wbands[is],
-                    &ovlp_mat[0], norb,
-                    &zero,
-                    &proj_mat_tmp[0], norb);
-
-        cblas_zgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-                    wbands[is], norb, norb,
-                    &one,
-                    &proj_mat_tmp[0], norb,
-                    &Lowdin[0], norb,
-                    &zero,
-                    &mat_tmp[0], norb);
+        const Matrix& C = eigenvec[is];
+        proj_mat_tmp = C.adjoint() * overlap_columns;
+        mat_tmp = proj_mat_tmp * Lowdin;
 
         if(!check_window_overlap(i_k_point,is)) continue;
 
         if(projector_type == 1)
         {
-          cblas_zgemm(CblasRowMajor, CblasConjTrans, CblasNoTrans,
-                    norb, norb, wbands[is],
-                    &one,
-                    &mat_tmp[0], norb,
-                    &mat_tmp[0], norb,
-                    &zero,
-                    &norm_orth[0], norb);
-
-        hermitian_sqrt_inverse(
-                    &norm_orth[0], &eigen_val[0], &work_mat[0],
-                    &sqrt_inver[0], norb,
-                    i_k_point, is, "default projector Gram matrix");
+          norm_orth = mat_tmp.adjoint() * mat_tmp;
+          hermitian_sqrt_inverse(
+              norm_orth, sqrt_inver,
+              i_k_point, is, "default projector Gram matrix");
         /*
         for(int i=0; i<norb; i++){
           if(std::fabs(eigen_val[i])<1.0e-12){
@@ -437,13 +372,7 @@ namespace DFT_plus_DMFT
         }
         */
 
-        cblas_zgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-                    wbands[is], norb, norb,
-                    &one,
-                    &mat_tmp[0], norb,
-                    &sqrt_inver[0], norb,
-                    &zero,
-                    &proj_mat_tmp[0], norb);
+          proj_mat_tmp = mat_tmp * sqrt_inver;
         }
         else
         {
@@ -492,37 +421,26 @@ namespace DFT_plus_DMFT
             cwf_window_max_local =
                 std::max(cwf_window_max_local, window_weight[iband]);
 
-            for(int iorb=0; iorb<norb; iorb++)
-              mat_tmp[iband*norb+iorb] *= window_weight[iband];
+            mat_tmp.row(iband) *= window_weight[iband];
           }
 
           if(!(max_window > 0.0))
             projector_abort("CWF window contains no usable KS states", i_k_point, is, 0);
 
-          const lapack_int svd_m = static_cast<lapack_int>(wbands[is]);
-          const lapack_int svd_n = static_cast<lapack_int>(norb);
-          const lapack_int info_zgesvd = LAPACKE_zgesvd(
-              LAPACK_ROW_MAJOR, 'A', 'A', svd_m, svd_n,
-              mat_tmp.data(), svd_n,
-              singular_values.data(),
-              U_full.data(), svd_m,
-              VT.data(), svd_n,
-              superb.data());
-
-          if(info_zgesvd < 0)
-            projector_abort("LAPACKE_zgesvd illegal argument", i_k_point, is, info_zgesvd);
-          if(info_zgesvd > 0)
-            projector_abort("LAPACKE_zgesvd did not converge", i_k_point, is, info_zgesvd);
+          Eigen::JacobiSVD<Matrix> svd(mat_tmp, Eigen::ComputeThinU | Eigen::ComputeThinV);
+          if(svd.info() != Eigen::Success)
+            projector_abort("CWF SVD did not converge", i_k_point, is, svd.info());
+          const auto& singular_values = svd.singularValues();
 
           for(int i=0; i<norb; i++)
             if(!std::isfinite(singular_values[i]))
               projector_abort("non-finite CWF singular value", i_k_point, is, 0);
 
-          const double s_max = singular_values.front();
+          const double s_max = singular_values[0];
           const double s_min = singular_values[static_cast<std::size_t>(norb - 1)];
           const double rank_tolerance =
               std::numeric_limits<double>::epsilon()*
-              static_cast<double>(std::max(svd_m, svd_n))*s_max;
+              static_cast<double>(std::max(wbands[is], norb))*s_max;
 
           if(!(s_max > 0.0) || s_min <= rank_tolerance)
           {
@@ -550,26 +468,8 @@ namespace DFT_plus_DMFT
           }
           cwf_rcond_min_local = std::min(cwf_rcond_min_local, rcond);
 
-          for(lapack_int row=0; row<svd_m; row++)
-            for(lapack_int col=0; col<svd_n; col++)
-              U_thin[static_cast<std::size_t>(row)*svd_n+col] =
-                  U_full[static_cast<std::size_t>(row)*svd_m+col];
-
-          cblas_zgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-                      wbands[is], norb, norb,
-                      &one,
-                      U_thin.data(), norb,
-                      VT.data(), norb,
-                      &zero,
-                      proj_mat_tmp.data(), norb);
-
-          cblas_zgemm(CblasRowMajor, CblasConjTrans, CblasNoTrans,
-                      norb, norb, wbands[is],
-                      &one,
-                      proj_mat_tmp.data(), norb,
-                      proj_mat_tmp.data(), norb,
-                      &zero,
-                      norm_orth.data(), norb);
+          proj_mat_tmp = svd.matrixU() * svd.matrixV().adjoint();
+          norm_orth = proj_mat_tmp.adjoint() * proj_mat_tmp;
 
           double orthogonality_error = 0.0;
           for(int iorb1=0; iorb1<norb; iorb1++)
@@ -578,7 +478,7 @@ namespace DFT_plus_DMFT
               const std::complex<double> target =
                   iorb1 == iorb2 ? one : zero;
               const double residual =
-                  std::abs(norm_orth[iorb1*norb+iorb2] - target);
+                  std::abs(norm_orth(iorb1,iorb2) - target);
               if(!std::isfinite(residual))
                 projector_abort("non-finite CWF orthogonality residual",
                                 i_k_point, is, 0);
@@ -595,22 +495,17 @@ namespace DFT_plus_DMFT
         for(int iatom=0; iatom<natom; iatom++)
         {
           const int m_tot = norb_sub[iatom];
+          Matrix& P = this->projector_mat[ik][iatom][is];
           for(int m=0; m<m_tot; m++)
-            for(int iband=0; iband<wbands[is]; iband++)
-              this->projector_mat[ik][iatom][is][iband*m_tot+m] = 
-                    proj_mat_tmp[iband*norb+orb_index[iatom][m]];
-        
-          //Local Haimiltonian
-          for(int m1=0; m1<m_tot; m1++)
-            for(int m2=0; m2<m_tot; m2++)
-              for(int iband=0; iband<wbands[is]; iband++)
-                this->unitary_trans[ik][iatom][is][m1*m_tot+m2] += 
-                  std::conj(proj_mat_tmp[iband*norb+orb_index[iatom][m1]])*
-                  epsilon[is][i_k_point][iband]*
-                  proj_mat_tmp[iband*norb+orb_index[iatom][m2]];
+            P.col(m) = proj_mat_tmp.col(orb_index[iatom][m]);
 
+          Matrix& H = this->unitary_trans[ik][iatom][is];
+          const Eigen::Map<const Eigen::VectorXd> energies(
+              epsilon[is][i_k_point].data(), wbands[is]);
+          const Matrix weighted_P = energies.asDiagonal() * P;
+          H = P.adjoint() * weighted_P;
           for(int m=0; m<m_tot; m++)
-            this->TB_Hk[ik][iatom][is][m] = this->unitary_trans[ik][iatom][is][m*m_tot+m];
+            this->TB_Hk[ik][iatom][is][m] = H(m,m);
 
           if(projector_type == 2)
           {
@@ -619,8 +514,7 @@ namespace DFT_plus_DMFT
               for(int m2=0; m2<m_tot; m2++)
               {
                 const double residual = std::abs(
-                    this->unitary_trans[ik][iatom][is][m1*m_tot+m2] -
-                    std::conj(this->unitary_trans[ik][iatom][is][m2*m_tot+m1]));
+                    H(m1,m2) - std::conj(H(m2,m1)));
                 if(!std::isfinite(residual))
                   projector_abort("non-finite local-Hamiltonian residual",
                                   i_k_point, is, 0);
@@ -765,42 +659,32 @@ namespace DFT_plus_DMFT
     {
       const int iatom = atom.ineq_iatom(ineq);
       const int m_tot = norb_sub[iatom];
-      int info_zheev;
-      std::vector<double> eigen_val(m_tot);
 
       for(int ik=0; ik<k_map.size(); ik++)
       {
         for(int is=0; is<nspin; is++)
         {
-          auto& unitary_trans_isk = this->unitary_trans[ik][iatom][is];
-
-          info_zheev = LAPACKE_zheev(LAPACK_ROW_MAJOR, 'V', 'U', m_tot,
-                        &unitary_trans_isk[0], m_tot, &eigen_val[0] );
-
-          if(info_zheev != 0)
+          Matrix& rotation = this->unitary_trans[ik][iatom][is];
+          Eigen::SelfAdjointEigenSolver<Matrix> solver;
+          solver.compute(rotation.selfadjointView<Eigen::Upper>());
+          if(solver.info() != Eigen::Success)
             projector_abort("local-Hamiltonian eigensolver failed",
-                            k_map[ik], is, info_zheev);
+                            k_map[ik], is, solver.info());
+          rotation = solver.eigenvectors();
+          for(int m=0; m<m_tot; m++)
+            this->TB_Hk[ik][iatom][is][m] = solver.eigenvalues()[m];
 
-          for(int m=0; m<m_tot; m++) this->TB_Hk[ik][iatom][is][m] = std::complex<double>(eigen_val[m], 0.0);
-
-          cblas_zgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-                      wbands[is], m_tot, m_tot,
-                      &one,
-                      &projector_mat_tmp[ik][iatom][is][0], m_tot,
-                      &unitary_trans_isk[0], m_tot,
-                      &zero,
-                      &this->projector_mat[ik][iatom][is][0], m_tot );
+          const Matrix& P0 = projector_mat_tmp[ik][iatom][is];
+          Matrix& P = this->projector_mat[ik][iatom][is];
+          P = P0 * rotation;
 
           for(int iatom1=0; iatom1<natom; iatom1++)
-            if(iatom1!=iatom && atom.equ_atom(iatom1)==ineq)
-              cblas_zgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-                      wbands[is], m_tot, m_tot,
-                      &one,
-                      &projector_mat_tmp[ik][iatom1][is][0], m_tot,
-                      &unitary_trans_isk[0], m_tot,
-                      &zero,
-                      &this->projector_mat[ik][iatom1][is][0], m_tot );
-            
+            if(iatom1!=iatom && atom.equ_atom(iatom1)==ineq){
+              const Matrix& P_equiv0 = projector_mat_tmp[ik][iatom1][is];
+              Matrix& P_equiv = this->projector_mat[ik][iatom1][is];
+              P_equiv = P_equiv0 * rotation;
+            }
+
         }//is
       }//ik  
     }//iatom
