@@ -140,8 +140,6 @@ namespace DMFT
         for(int m=0; m<m_tot; m++)
           Eimpa[is](m, m) -= average_Eimp;
 
-      this->write_params(in, current_dir+"/PARAMS", mu-average_Eimp);
-
       //===========================================
       //           write  delta.dat
       //===========================================
@@ -151,7 +149,8 @@ namespace DMFT
       //===========================================
       //           write  ctqmc.cix
       //===========================================
-      this->write_cix(nspin, m_tot, current_dir+"/ctqmc.cix", Eimpa, Utensor);
+      const bool diagonal = this->write_cix(nspin, m_tot, current_dir+"/ctqmc.cix", Eimpa, Utensor);
+      this->write_params(in, current_dir+"/PARAMS", mu-average_Eimp, diagonal);
 
       //==================================================
       //   write  Sigma.in; the input self-energy 
@@ -190,7 +189,7 @@ namespace DMFT
   }
 
   void Rutgers_CTHYB::write_params(DMFT::input_info& in, 
-                  const std::string file, const double mu)
+                  const std::string file, const double mu, const bool diagonal)
   {
     debug::codestamp("Rutgers_CTHYB::write_params");
 
@@ -213,7 +212,9 @@ namespace DMFT
     ofs << "svd_lmax 25    #We will use SVD basis to expand G, with this cutoff\n";
     ofs << "svd_Ntau " << *(int*)in.parameter("n_tau") + 1 << '\n';
     ofs << "aom 1    #number of frequency points to determin high frequency tail\n";
-    ofs << "mode SH    #We will use self-energy sampling, and Hubbard I tail\n";
+    // Direct self-energy sampling can fail for multidimensional atomic blocks.
+    // Use the Dyson self-energy in that case, retaining the Hubbard-I tail.
+    ofs << "mode " << (diagonal ? "SH" : "GH") << '\n';
     ofs << "Delta delta.dat    #Input bath function hybridization\n";
     ofs << "cix ctqmc.cix    #Input file with atomic state\n";
     ofs << "Gf Gw.out    #Filename of the output Green’s function G(iw)\n";
@@ -259,8 +260,8 @@ namespace DMFT
     return;
   }
 
-  void Rutgers_CTHYB::write_cix(const int nspin, const int m_tot, const std::string file, 
-          const std::vector<DFT_plus_DMFT::Matrix>& Esplit,
+  bool Rutgers_CTHYB::write_cix(const int nspin, const int m_tot, const std::string file,
+          const std::vector<std::vector<std::complex<double>>>& Esplit,
           const std::vector<std::vector<std::vector<std::vector<double>>>>& Utensor)
   {
     debug::codestamp("Rutgers_CTHYB::write_cix");
@@ -276,6 +277,10 @@ namespace DMFT
       std::ofstream ofs(file.c_str());
       if(!ofs) throw std::runtime_error("Cannot open " + file);
       rutgers_atomic::write_cix(ofs, levels, Utensor, blocks, GLC::Hartree_to_eV);
+      // Diagonal here means every atomic block contains a single state.
+      for(const auto& block : blocks)
+        if(block.states.size() > 1) return false;
+      return true;
     }
     catch(const std::exception& error)
     {

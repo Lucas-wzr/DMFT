@@ -203,7 +203,7 @@ if __name__ == '__main__':
         for i in range(Aux_omega.shape[0]):
             omega = Aux_im[i,0]
             ker = Aux_im[:,1]/(omega - Aux_im[:,0] + ieta)
-            Aux_omega[i]=integrate.trapz(ker[:], Aux_im[:,0] )
+            Aux_omega[i]=integrate.trapezoid(ker[:], Aux_im[:,0] )
         
         Sc = Aux_im[:,0] - 1.0/Aux_omega[:] + Sigoo
         np.savetxt('sig.out', np.array([Aux_im[:,0], Sc.real, Sc.imag]).transpose())
