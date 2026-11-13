@@ -45,6 +45,7 @@ namespace DMFT
     int last_charge_step;           //The last one step before the starting step of charge loop; default:1
     int last_DMFT_step;             //The last one step before the stsrting step of DMFT loop; default:1
 
+    int local_symmetry;             //0:none, 1:cubic, 2:t2g only, 3:eg only; default:0
     int flag_projector;             //nao (compatibility alias: default):1; cwf:2; default:nao
     double cwf_ep0;                 //lower CWF window edge relative to E_F; unit:eV; default:-5.0
     double cwf_ep1;                 //upper CWF window edge relative to E_F; unit:eV; default:5.0
@@ -71,8 +72,6 @@ namespace DMFT
   {
     public:
     bool read();
-
-    bool read_parameter(char* keyword, std::vector<std::string>& val, int count=1);
 
     static std::string strtolower(std::string in_str);
 

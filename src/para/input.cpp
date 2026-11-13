@@ -55,7 +55,7 @@ namespace DMFT
     params.flag_hyf_dc_mode = 1;
     params.hyf_dc_shift_d = params.hyf_dc_shift_p = 0.0;
     params.start_charge_step = params.start_DMFT_step = params.last_charge_step = params.last_DMFT_step = 1;
-    int local_symmetry = 0;
+    params.local_symmetry = 0;
 
     // 步骤 2：一次读完文件，记录显式输入，再进行类型转换。
     std::map<std::string, std::vector<std::string>> input_entries;
@@ -184,7 +184,7 @@ namespace DMFT
     text("comctqmc_exe", params.comctqmc_exe);
     text("comctqmc_evalsim", params.comctqmc_evalsim);
     text("comctqmc_launcher", params.comctqmc_launcher);
-    integer("local_symmetry", local_symmetry);
+    integer("local_symmetry", params.local_symmetry);
     option("projector", params.flag_projector, {{"nao", 1}, {"default", 1}, {"cwf", 2}});
     real("cwf_ep0", params.cwf_ep0);
     real("cwf_ep1", params.cwf_ep1);
@@ -299,7 +299,7 @@ namespace DMFT
       << "comctqmc_evalsim  " << params.comctqmc_evalsim << '\n'
       << "comctqmc_launcher  " << params.comctqmc_launcher << '\n';
     GLV::ofs_running
-      << "local_symmetry  " << local_symmetry << '\n'
+      << "local_symmetry  " << params.local_symmetry << '\n'
       << "projector  " << (params.flag_projector == 1 ? "nao" : "cwf") << '\n'
       << "projection_min_weight  " << params.projection_min_weight << '\n';
     if(params.flag_projector == 2) GLV::ofs_running
@@ -315,47 +315,6 @@ namespace DMFT
       << params.last_charge_step << " " << params.last_DMFT_step << '\n'
       << "===============================================================\n" << std::endl;
     return true;
-  }
-
-  bool input_info::read_parameter(char* keyword, std::vector<std::string>& val, int count)
-  {
-    // 兼容 correlated_atoms 的独立读取；保留缺省时抛出 bool 的调用约定。
-    // 与主读取流程一致，支持制表符、长行和末尾无换行。
-    debug::codestamp("input_info::read_parameter");
-    std::ifstream ifs("DMFT.in");
-    if(!ifs) {
-      std::cerr << "Fail to open file DMFT.in" << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    const std::set<std::string> known = {
-      "calculation", "dft_solver", "dft_solver_exe", "temperature",
-        "magnetism", "impurity_solver", "interaction_type", "double_counting",
-        "max_charge_step", "max_dmft_step", "dmft_step_first", "max_dft_step", "mc_step",
-        "comctqmc_nproc", "warmup", "comctqmc_exe", "comctqmc_evalsim",
-        "comctqmc_launcher", "projection_window", "dos_window", "local_symmetry",
-        "restart", "dft_xc", "charge_mix_param", "delta_sigma", "delta_rho",
-        "mixing_step", "hybrid_xc_coeff", "hyf_xc_alpha", "hyf_dc_mode",
-        "hyf_dc_shift_d", "hyf_dc_shift_p", "projector", "cwf_ep0",
-        "cwf_ep1", "cwf_t", "projection_min_weight", "nf"
-    };
-    std::string line;
-    while(std::getline(ifs, line)) {
-      const auto comment = line.find('#');
-      if(comment != std::string::npos) line.erase(comment);
-      std::istringstream tokens(line);
-      std::string key, word;
-      if(!(tokens >> key)) continue;
-      key = strtolower(key);
-      if(key == strtolower(keyword)) {
-        std::vector<std::string> words;
-        while(tokens >> word) words.push_back(word);
-        if(words.size() != static_cast<std::size_t>(count)) throw line;
-        val = words;
-        return true;
-      }
-      if(!known.count(key)) throw std::string("Unsupported parameter " + key);
-    }
-    throw true;
   }
 
   std::string input_info::strtolower(std::string in_str)

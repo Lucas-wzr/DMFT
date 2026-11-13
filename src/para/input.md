@@ -36,6 +36,7 @@
 - `mc_step` 默认 `5000000`。
 - `projection_window` 默认 `-5.0 5.0`。
 - `restart` 默认 `1 1 1 1`。
+- `local_symmetry` 默认 `0`；`1` 为立方对称处理，d 壳层下 `2` 选择 t2g，`3` 选择 eg。
 
 默认值也可以按后端或计算模式选择，称为“条件默认值”。它仍是预先规定的默认策略，不必单独设立基本类别。
 
@@ -140,7 +141,7 @@
 
 应区分“仍然有效的旧写法”“已废弃但暂时接受”和“已不再支持”。不能仅因为关键词在白名单里，就认为它具有实际作用。
 
-当前兼容处理：`dft_solver_exe` 和 `hybrid_xc_coeff` 仍被接受，但输出未生效警告。`local_symmetry` 在 `input.cpp` 中读取并打印，随后由 `correlated_atoms.cpp` 通过 `read_parameter()` 再次读取并使用，并非无效参数。
+当前兼容处理：`dft_solver_exe` 和 `hybrid_xc_coeff` 仍被接受，但输出未生效警告。`local_symmetry` 属于第 2 类，默认 `0`，由 `input_info::read()` 统一读取并保存到参数结构体；原子模块通过 `in.get().local_symmetry` 取得配置，保留用于轨道构建及对称化的副本。它不是从 DFT 输出推导的量；`symmetry.dat` 的原子等价关系仍单独读取。
 
 ### 可变运行状态
 
@@ -187,7 +188,7 @@
 
 `interaction_type`、`comctqmc_nproc`、`warmup`、`comctqmc_exe`、`comctqmc_evalsim`、`comctqmc_launcher`、`projection_min_weight` 以及 `impurity_solver=comctqmc` 均沿用 develop 的默认值、生效条件与校验。ComCTQMC 的五个关键词在任何求解器下都被接受，取值和日志只在 `impurity_solver=comctqmc` 时生效。
 
-主流程不再逐参数调用 `read_parameter()`。该函数暂时保留供 `correlated_atoms.cpp` 读取 `local_symmetry`，仍保留原来的缺省异常约定，并同步支持制表符和末尾无换行。旧 `parameter()` 字符串分发及 `const void*` 接口已删除，参数集中保存在 `input_parameters` 结构体中，保留四类分组；`input_info` 私有持有该结构体，通过唯一的 `const input_parameters& get() const` 返回只读引用。例如 `in.get().temperature`、`in.get().max_dmft_step`，字符串和窗口也直接通过成员读取，不再逐参数定义 getter。读取、默认值补齐和校验仍由 `input_info::read()` 负责。下游无需手动转换指针类型。遗留的 `input_info::test()` 和 `input_info::out()` 已删除，`parameters::out()` 中的对应调用也已移除；输入校验和最终参数日志由 `read()` 负责。
+所有输入参数统一读取；重复扫描文件的 `read_parameter()` 和 `atoms_info::read_local_symmetry()` 已删除，不再通过抛出 `bool` 表示参数缺省。旧 `parameter()` 字符串分发及 `const void*` 接口已删除，参数集中保存在 `input_parameters` 结构体中，保留四类分组；`input_info` 私有持有该结构体，通过唯一的 `const input_parameters& get() const` 返回只读引用。例如 `in.get().temperature`、`in.get().max_dmft_step`，字符串和窗口也直接通过成员读取，不再逐参数定义 getter。读取、默认值补齐和校验仍由 `input_info::read()` 负责。下游无需手动转换指针类型。遗留的 `input_info::test()` 和 `input_info::out()` 已删除，`parameters::out()` 中的对应调用也已移除；输入校验和最终参数日志由 `read()` 负责。
 
 下面七步描述更完整的后续设计，其中来源标注、统一参数定义表、新增物理约束尚未全部实现；类型明确的只读访问接口已完成。
 

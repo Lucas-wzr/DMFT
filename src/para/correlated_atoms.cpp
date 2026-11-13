@@ -97,12 +97,12 @@ namespace DFT_output
     return this->mag_moment[iatom];
   }
 
-  void atoms_info::read(DMFT::input_info& in)
+  void atoms_info::read(const DMFT::input_info& in)
   {
     // GLV::ofs_running << "Reading correlated atoms information ......" << std::endl;
 
     this->read_structure_symmetry();
-    this->read_local_symmetry(in);
+    this->local_symmetry = in.get().local_symmetry;
     this->read_correlated_atoms_info();
     return;
   }
@@ -302,27 +302,6 @@ namespace DFT_output
     }
 
     return true;	  	
-  }
-
-  bool atoms_info::read_local_symmetry(DMFT::input_info& in)
-  {
-    debug::codestamp("input_info::read_local_symmetry");
-
-    try {
-      std::vector<std::string> str_val;
-      in.read_parameter("local_symmetry", str_val);
-      this->local_symmetry = atoi(str_val[0].c_str());
-    }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch(const bool not_given){
-      // GLV::ofs_running << "Warning: local_symmetry is not given and set default value 0" << std::endl;
-      this->local_symmetry = 0;
-    }
-
-    return true;
   }
 
   void atoms_info::out()
