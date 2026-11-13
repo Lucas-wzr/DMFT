@@ -97,7 +97,7 @@
 
 ### 生效条件
 
-参数可以有合法值，但只有在特定模式下才参与计算。例如 CWF 窗口设置用于 `projector=cwf` 的情形。
+参数可以有合法值，但只有在特定模式下才参与计算。当前例子：CWF 窗口设置用于 `projector=cwf` 的情形；ComCTQMC 的五个启动与采样参数只在 `impurity_solver=comctqmc` 时参与计算和输出。
 
 建议明确区分“未填写且当前不需要”和“用户显式填写但当前不生效”。对后者提示未生效；若组合本身不允许，则报错。不要静默让用户误以为设置已被采用。
 
@@ -175,7 +175,15 @@
 5. 计算 `beta`、`n_tau`、`n_omega` 和 `flag_restart`。
 6. 集中输出最终参数。
 
-当前没有新增必填项，因此没有单独的必填检查阶段。新增了严格数值转换、重复和未知关键词检查，以及温度为正和网格整数溢出检查；已有有效输入的默认值、公式、选项映射和单位保持不变。日志数值精度改为 12 位有效数字。
+当前没有新增必填项，因此没有单独的必填检查阶段。新增了严格数值转换、重复和未知关键词检查，以及温度为正和网格整数溢出检查；已有有效输入的默认值、公式、选项映射和单位保持不变。日志数值精度改为 12 位有效数字，`projector=default` 在日志中统一显示为规范名 `nao`。
+
+相对 develop 新增的拒绝规则（此前被静默接受）：
+
+- 数值关键词含非法文本时退出，不再由 `atoi/atof` 静默转成 0。例如 `temperature abc` 在 develop 上得到 `temperature 0`，会使 `beta` 发散。
+- 同一关键词重复出现时退出；develop 取首次出现的值。
+- 未知关键词退出，判定范围与 `read()` 实际消费的关键词一致。
+
+`interaction_type`、`comctqmc_nproc`、`warmup`、`comctqmc_exe`、`comctqmc_evalsim`、`comctqmc_launcher`、`projection_min_weight` 以及 `impurity_solver=comctqmc` 均沿用 develop 的默认值、生效条件与校验。ComCTQMC 的五个关键词在任何求解器下都被接受，取值和日志只在 `impurity_solver=comctqmc` 时生效。
 
 主流程不再逐参数调用 `read_parameter()`。该函数暂时保留供 `correlated_atoms.cpp` 读取 `local_symmetry`，仍保留原来的缺省异常约定，并同步支持制表符和末尾无换行。`parameter()` 的旧访问接口仍保留。遗留的 `input_info::test()` 和 `input_info::out()` 已删除，`parameters::out()` 中的对应调用也已移除；输入校验和最终参数日志由 `read()` 负责。
 
@@ -232,3 +240,15 @@
 ### 修改边界
 
 本次已重组 `read()` 并替换主解析流程，保留下游访问接口；未开放 `n_tau/n_omega` 手动输入，也未改变物理默认值。后续继续完善参数来源日志和类型明确的访问接口时，应保持已有有效输入的数值结果一致。
+
+### 与 develop 的同步要求
+
+本分支最初基于 `init`，而 `interaction_type`、ComCTQMC 相关参数和 `projection_min_weight` 是之后经 `general-interaction` 并入 develop 的。rebase 时若只合并 `parameter()` 的分发分支、却漏掉 `input.h` 的成员声明和 `read()` 的解析块，会直接编译失败；更隐蔽的情况是成员仍声明但不再赋值，下游读到未初始化值而不报错。
+
+因此每次 rebase 后必须核对三处一致：`input.h` 的成员声明、`read()` 的赋值与 `recognized` 集合、`parameter()` 的分发分支。
+
+`dmft_step_first` 曾被误删，现已恢复。它在 `init` 中存在，用于让首个电荷循环采用不同于 `max_dmft_step` 的 DMFT 步数上限：首轮从 KS 密度出发、自能远离收敛，需要更多步；后续循环密度只被微调，可少跑以节省 QMC 采样。未指定时取 `max_dmft_step`，因此默认行为与无此参数一致。
+
+追溯 git 对象可知它不是被有意废弃的：`main` 是一条独立历史（空根 `Initial commit` → `Import uncompiled DMFT source snapshot from DF server`），导入的 DF 服务器快照本身就缺这一行声明；随后的 `Normalize text file line endings to LF` 只做 CRLF→LF 转换，未恢复内容。合并提交 `96d6ea02`（Merge branch 'main' into merge-main-at-init）两侧**没有共同祖先**，每个文件都是 add/add 冲突，解决时三个文件的 blob 被整体取成 main 侧，功能就此丢失；4 分钟后的 `45716978` 又对 `general-interaction` 侧重复了同样的丢弃。
+
+由此得到一条通用要求：本仓库存在无共同祖先的历史合并，冲突必须逐块核对两侧内容，不能整文件取一侧。整侧取舍会静默丢弃另一侧的功能，且编译期未必报错——`dmft_step_first` 丢失后 `solver.cpp` 的循环上界被一并改写，程序照常编译运行，只是首轮不再享有更多步数。

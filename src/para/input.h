@@ -36,8 +36,12 @@ namespace DMFT
     double nf;                      //number of correlated electrons used in the double countings; default:1.0
     int charge_step_max;            //number of the maximum charge self-consistent interation loop; default:1
     int DMFT_step_max;              //number of the maximum DMFT interation step under each charge loop; default:1
+    int DMFT_step_first;            //DMFT step limit under the first charge loop; default:DMFT_step_max
     int DFT_step_max;               //number of the maximum DFT interation step under each charge loop; default:1
     long long MC_step;              //number of MC sampling steps; default:5000000
+    long long warmup;               //warmup updates per chain; currently used only by ComCTQMC; default:100000
+    int comctqmc_nproc;             //0: use allocated physical cores on the launching node
+    std::string comctqmc_exe, comctqmc_evalsim, comctqmc_launcher;
     std::vector<double> proj_window;  //projection_window: energy window for hybridization function
     std::vector<double> DOS_window;   //dos_window: energy window for DOS
     bool hyb_func;                  //Whether hybrid functional is used or not; default:false
@@ -61,6 +65,7 @@ namespace DMFT
     double cwf_ep0;                 //lower CWF window edge relative to E_F; unit:eV; default:-5.0
     double cwf_ep1;                 //upper CWF window edge relative to E_F; unit:eV; default:5.0
     double cwf_t;                   //CWF window smoothing energy, independent of temperature; unit:eV; default:0.01
+    double projection_min_weight;   //Minimum eigenvalue of the unweighted projector Gram matrix; default:0.9
 
     // Derived parameters computed in read(); not independent DMFT.in keywords.
     double beta;                   //from temperature: 1/(k_b*T); unit:1/Hartree

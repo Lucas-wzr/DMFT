@@ -55,7 +55,7 @@ namespace DMFT
           const std::vector<std::vector<DFT_plus_DMFT::Matrix>>& hyb_omega);
 
     bool write_cix(const int nspin, const int m_tot, const std::string file,
-        const std::vector<std::vector<std::complex<double>>>& Esplit,
+        const std::vector<DFT_plus_DMFT::Matrix>& Esplit,
         const std::vector<std::vector<std::vector<std::vector<double>>>>& Utensor);
 
     //========================interface=========================

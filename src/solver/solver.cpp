@@ -144,8 +144,11 @@ namespace DFT_plus_DMFT
       //=============================================================
       //            DMFT loop
       //=============================================================
+      const int max_dmft_step_current = (charge_loop_count>1
+          ? *(int*)this->pars.in.parameter("max_dmft_step")
+          : *(int*)this->pars.in.parameter("dmft_step_first"));
       for(int dmft_step = (charge_loop_count>1? 1 : *(int*)this->pars.in.parameter("start_dmft_step"));
-          dmft_step <= *(int*)this->pars.in.parameter("max_dmft_step"); dmft_step++)
+          dmft_step <= max_dmft_step_current; dmft_step++)
       {
         if(dmft_step>1 && sigma_convergency) break;   //Run at least one dmft step under each charge step
 

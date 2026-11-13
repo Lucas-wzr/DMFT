@@ -30,11 +30,17 @@ namespace DMFT
     temperature = 300.0;
     flag_magnetism = 3;
     flag_impurity_solver = 4;
+    flag_interaction_type = 1;
     flag_double_counting = 1;
     nf = 1.0;
     proj_window = {-5.0, 5.0};
     charge_step_max = DMFT_step_max = DFT_step_max = 1;
     MC_step = 5000000;
+    warmup = 100000;
+    comctqmc_nproc = 0;
+    comctqmc_exe = "CTQMC";
+    comctqmc_evalsim = "EVALSIM";
+    comctqmc_launcher = "comctqmc-launch";
     delta_sigma = 0.1;
     delta_rho = 1.0e-3;
     mixing_step = 8;
@@ -43,6 +49,7 @@ namespace DMFT
     cwf_ep0 = -5.0;
     cwf_ep1 = 5.0;
     cwf_t = 0.01;
+    projection_min_weight = 0.9;
     hyb_func = false;
     hyf_xc_alpha = 1.0;
     flag_hyf_dc_mode = 1;
@@ -146,13 +153,21 @@ namespace DMFT
           fail(key, "invalid real value '" + text + "'");
       }
     };
+    // text：读取 key 对应的单个字符串，原样保留，不做大小写规范化（可能是路径或可执行文件名）。
+    auto text = [&](const std::string& key, std::string& value) {
+      if(!supplied(key, 1)) return;
+      value = input_entries.at(key)[0];
+    };
 
     option("calculation", calculation_type, {{"scf", 0}, {"spectra", 1}});
     option("dft_solver", flag_DFT_solver, {{"aims", 1}, {"abacus", 2}});
     real("temperature", temperature);
     option("magnetism", flag_magnetism, {{"afm", 1}, {"fm", 2}, {"para", 3}, {"none", 4}});
     option("impurity_solver", flag_impurity_solver,
-           {{"alps-cthyb", 1}, {"alps-cthyb-segment", 2}, {"pacs", 3}, {"rutgers-cthyb", 4}, {"iqist", 5}});
+           {{"alps-cthyb", 1}, {"alps-cthyb-segment", 2}, {"pacs", 3}, {"rutgers-cthyb", 4}, {"iqist", 5},
+            {"comctqmc", 6}});
+    option("interaction_type", flag_interaction_type,
+           {{"density_density", 1}, {"kanamori", 2}, {"slater_condon", 3}, {"tensor", 4}});
     option("double_counting", flag_double_counting, {{"fll", 1}, {"nominal", 2}, {"arbitrary", 3}});
     real("nf", nf);
     window("projection_window", proj_window);
@@ -166,11 +181,18 @@ namespace DMFT
     integer("mixing_step", mixing_step);
     real("charge_mix_param", charge_mix_param);
     if(supplied("mc_step", 1)) MC_step = integer_value("mc_step", input_entries.at("mc_step")[0]);
+    // ComCTQMC 的采样与启动参数：任何求解器下都接受这些关键词，取值只在 comctqmc 时生效。
+    integer("comctqmc_nproc", comctqmc_nproc);
+    if(supplied("warmup", 1)) warmup = integer_value("warmup", input_entries.at("warmup")[0]);
+    text("comctqmc_exe", comctqmc_exe);
+    text("comctqmc_evalsim", comctqmc_evalsim);
+    text("comctqmc_launcher", comctqmc_launcher);
     integer("local_symmetry", local_symmetry);
     option("projector", flag_projector, {{"nao", 1}, {"default", 1}, {"cwf", 2}});
     real("cwf_ep0", cwf_ep0);
     real("cwf_ep1", cwf_ep1);
     real("cwf_t", cwf_t);
+    real("projection_min_weight", projection_min_weight);
     // 保留现有 dft_xc 约定：只有 hybrid 启用杂化泛函。
     if(supplied("dft_xc", 1)) hyb_func = strtolower(input_entries.at("dft_xc")[0]) == "hybrid";
     real("hyf_xc_alpha", hyf_xc_alpha);
@@ -213,6 +235,15 @@ namespace DMFT
       fail("dos_window", "must contain projection_window");
     if(flag_projector == 2 && (!(cwf_ep0 < cwf_ep1) || !(cwf_t > 0.0)))
       fail("projector", "CWF requires cwf_ep0 < cwf_ep1 and cwf_t > 0 (eV)");
+    if(!(projection_min_weight > 0.0 && projection_min_weight <= 1.0))
+      fail("projection_min_weight", "must be in (0,1]");
+    if(flag_interaction_type != 1 && flag_impurity_solver != 4 && flag_impurity_solver != 6)
+      fail("interaction_type", "general interactions require rutgers-cthyb or comctqmc");
+    if(flag_impurity_solver == 6) {
+      if(comctqmc_nproc < 0) fail("comctqmc_nproc", "must be non-negative");
+      if(warmup < 0) fail("warmup", "must be non-negative");
+      if(MC_step <= 0) fail("mc_step", "must be positive");
+    }
 
     // 步骤 5：计算纯派生量。温度用 K，beta 用 Hartree^-1。
     // 网格保持先截断、奇数再加一；转换前检查范围，避免整数溢出。
@@ -237,7 +268,8 @@ namespace DMFT
       << "dft_solver  " << (flag_DFT_solver == 1 ? "aims" : "abacus") << '\n'
       << "temperature  " << temperature << '\n'
       << "magnetism  " << std::vector<std::string>{"", "afm", "fm", "para", "none"}[flag_magnetism] << '\n'
-      << "impurity_solver  " << std::vector<std::string>{"", "alps-cthyb", "alps-cthyb-segment", "pacs", "rutgers-cthyb", "iqist"}[flag_impurity_solver] << '\n'
+      << "impurity_solver  " << std::vector<std::string>{"", "alps-cthyb", "alps-cthyb-segment", "pacs", "rutgers-cthyb", "iqist", "comctqmc"}[flag_impurity_solver] << '\n'
+      << "interaction_type  " << std::vector<std::string>{"", "density_density", "kanamori", "slater_condon", "tensor"}[flag_interaction_type] << '\n'
       << "double_counting  " << std::vector<std::string>{"", "fll", "nominal", "arbitrary"}[flag_double_counting] << '\n';
     if(flag_double_counting == 2) GLV::ofs_running << "nf  " << nf << '\n';
     GLV::ofs_running
@@ -251,9 +283,17 @@ namespace DMFT
       << "delta_rho  " << delta_rho << '\n'
       << "mixing_step  " << mixing_step << '\n'
       << "charge_mix_param  " << charge_mix_param << '\n'
-      << "mc_step  " << MC_step << '\n'
+      << "mc_step  " << MC_step << '\n';
+    if(flag_impurity_solver == 6) GLV::ofs_running
+      << "comctqmc_nproc  " << comctqmc_nproc << '\n'
+      << "warmup  " << warmup << '\n'
+      << "comctqmc_exe  " << comctqmc_exe << '\n'
+      << "comctqmc_evalsim  " << comctqmc_evalsim << '\n'
+      << "comctqmc_launcher  " << comctqmc_launcher << '\n';
+    GLV::ofs_running
       << "local_symmetry  " << local_symmetry << '\n'
-      << "projector  " << (flag_projector == 1 ? "nao" : "cwf") << '\n';
+      << "projector  " << (flag_projector == 1 ? "nao" : "cwf") << '\n'
+      << "projection_min_weight  " << projection_min_weight << '\n';
     if(flag_projector == 2) GLV::ofs_running
       << "cwf_ep0  " << cwf_ep0 << " eV relative to E_F\n"
       << "cwf_ep1  " << cwf_ep1 << " eV relative to E_F\n"
@@ -281,13 +321,14 @@ namespace DMFT
     }
     const std::set<std::string> known = {
       "calculation", "dft_solver", "dft_solver_exe", "temperature",
-        "magnetism", "impurity_solver", "double_counting", "max_charge_step",
-        "max_dmft_step", "dmft_step_first", "max_dft_step", "mc_step",
-        "projection_window", "dos_window", "local_symmetry", "restart",
-        "dft_xc", "charge_mix_param", "delta_sigma", "delta_rho",
+        "magnetism", "impurity_solver", "interaction_type", "double_counting",
+        "max_charge_step", "max_dmft_step", "dmft_step_first", "max_dft_step", "mc_step",
+        "comctqmc_nproc", "warmup", "comctqmc_exe", "comctqmc_evalsim",
+        "comctqmc_launcher", "projection_window", "dos_window", "local_symmetry",
+        "restart", "dft_xc", "charge_mix_param", "delta_sigma", "delta_rho",
         "mixing_step", "hybrid_xc_coeff", "hyf_xc_alpha", "hyf_dc_mode",
         "hyf_dc_shift_d", "hyf_dc_shift_p", "projector", "cwf_ep0",
-        "cwf_ep1", "cwf_t", "nf"
+        "cwf_ep1", "cwf_t", "projection_min_weight", "nf"
     };
     std::string line;
     while(std::getline(ifs, line)) {
@@ -340,6 +381,7 @@ namespace DMFT
     else if(std::strcmp("double_counting", word.c_str())==0) return &flag_double_counting;
     else if(std::strcmp("max_charge_step", word.c_str())==0) return &charge_step_max;
     else if(std::strcmp("max_dmft_step", word.c_str())==0) return &DMFT_step_max;
+    else if(std::strcmp("dmft_step_first", word.c_str())==0) return &DMFT_step_first;
     else if(std::strcmp("max_dft_step", word.c_str())==0) return &DFT_step_max;
     else if(std::strcmp("mc_step", word.c_str())==0) return &MC_step;
     else if(std::strcmp("hyb_func", word.c_str())==0) return &hyb_func;
@@ -374,7 +416,3 @@ namespace DMFT
 
 // TODO: Replace the legacy const void* access interface with typed accessors.
 // Parameter metadata and logging can later share a lightweight definition table.
-// 将输出写得更完善
-// 将内部的option对应的变量改用string
-// 产出read_parameter
-// 重构parameter方法，用struct保存和读取参数

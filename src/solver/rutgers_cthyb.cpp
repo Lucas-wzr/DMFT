@@ -261,7 +261,7 @@ namespace DMFT
   }
 
   bool Rutgers_CTHYB::write_cix(const int nspin, const int m_tot, const std::string file,
-          const std::vector<std::vector<std::complex<double>>>& Esplit,
+          const std::vector<DFT_plus_DMFT::Matrix>& Esplit,
           const std::vector<std::vector<std::vector<std::vector<double>>>>& Utensor)
   {
     debug::codestamp("Rutgers_CTHYB::write_cix");
