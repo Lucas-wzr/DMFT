@@ -32,9 +32,9 @@ namespace DMFT
     flag_impurity_solver = 4;
     flag_interaction_type = 1;
     flag_double_counting = 1;
-    proj_window = {-5.0, 5.0};
-    charge_step_max = DMFT_step_max = DFT_step_max = 1;
-    MC_step = 5000000;
+    projection_window = {-5.0, 5.0};
+    max_charge_step = max_dmft_step = max_dft_step = 1;
+    mc_step = 5000000;
     warmup = 100000;
     comctqmc_nproc = 0;
     comctqmc_exe = "CTQMC";
@@ -169,17 +169,17 @@ namespace DMFT
            {{"density_density", 1}, {"kanamori", 2}, {"slater_condon", 3}, {"tensor", 4}});
     option("double_counting", flag_double_counting, {{"fll", 1}, {"nominal", 2}, {"arbitrary", 3}});
     real("nf", nf);
-    window("projection_window", proj_window);
-    window("dos_window", DOS_window);
-    integer("max_charge_step", charge_step_max);
-    integer("max_dmft_step", DMFT_step_max);
-    integer("dmft_step_first", DMFT_step_first);
-    integer("max_dft_step", DFT_step_max);
+    window("projection_window", projection_window);
+    window("dos_window", dos_window);
+    integer("max_charge_step", max_charge_step);
+    integer("max_dmft_step", max_dmft_step);
+    integer("dmft_step_first", dmft_step_first);
+    integer("max_dft_step", max_dft_step);
     real("delta_sigma", delta_sigma);
     real("delta_rho", delta_rho);
     integer("mixing_step", mixing_step);
     real("charge_mix_param", charge_mix_param);
-    if(supplied("mc_step", 1)) MC_step = integer_value("mc_step", input_entries.at("mc_step")[0]);
+    if(supplied("mc_step", 1)) mc_step = integer_value("mc_step", input_entries.at("mc_step")[0]);
     // ComCTQMC 的采样与启动参数：任何求解器下都接受这些关键词，取值只在 comctqmc 时生效。
     integer("comctqmc_nproc", comctqmc_nproc);
     if(supplied("warmup", 1)) warmup = integer_value("warmup", input_entries.at("warmup")[0]);
@@ -216,8 +216,8 @@ namespace DMFT
       if(!recognized.count(entry.first)) fail(entry.first, "unsupported keyword");
 
     // 步骤 3：补齐依赖默认值。只处理未显式输入的项，与文件行顺序无关。
-    if(!input_entries.count("dos_window")) DOS_window = proj_window;
-    if(!input_entries.count("dmft_step_first")) DMFT_step_first = DMFT_step_max;
+    if(!input_entries.count("dos_window")) dos_window = projection_window;
+    if(!input_entries.count("dmft_step_first")) dmft_step_first = max_dmft_step;
 
     // 步骤 4：在派生计算之前校验输入及组合。当前没有无条件必填项。
     if(flag_double_counting == 2 && !input_entries.count("nf"))
@@ -232,7 +232,7 @@ namespace DMFT
     if(flag_impurity_solver == 1 || flag_impurity_solver == 2)
       fail("impurity_solver", "ALPS solvers are unsupported now");
     if(temperature <= 0.0) fail("temperature", "must be positive");
-    if(DOS_window[0] > proj_window[0] || DOS_window[1] < proj_window[1])
+    if(dos_window[0] > projection_window[0] || dos_window[1] < projection_window[1])
       fail("dos_window", "must contain projection_window");
     if(flag_projector == 2 && (!(cwf_ep0 < cwf_ep1) || !(cwf_t > 0.0)))
       fail("projector", "CWF requires cwf_ep0 < cwf_ep1 and cwf_t > 0 (eV)");
@@ -243,7 +243,7 @@ namespace DMFT
     if(flag_impurity_solver == 6) {
       if(comctqmc_nproc < 0) fail("comctqmc_nproc", "must be non-negative");
       if(warmup < 0) fail("warmup", "must be non-negative");
-      if(MC_step <= 0) fail("mc_step", "must be positive");
+      if(mc_step <= 0) fail("mc_step", "must be positive");
     }
 
     // 步骤 5：计算纯派生量。温度用 K，beta 用 Hartree^-1。
@@ -274,17 +274,17 @@ namespace DMFT
       << "double_counting  " << std::vector<std::string>{"", "fll", "nominal", "arbitrary"}[flag_double_counting] << '\n';
     if(flag_double_counting == 2) GLV::ofs_running << "nf  " << nf << '\n';
     GLV::ofs_running
-      << "projection_window  " << proj_window[0] << "  " << proj_window[1] << '\n'
-      << "DOS_window  " << DOS_window[0] << "  " << DOS_window[1] << '\n'
-      << "max_charge_step  " << charge_step_max << '\n'
-      << "max_dmft_step  " << DMFT_step_max << '\n'
-      << "dmft_step_first  " << DMFT_step_first << '\n'
-      << "max_dft_step  " << DFT_step_max << '\n'
+      << "projection_window  " << projection_window[0] << "  " << projection_window[1] << '\n'
+      << "dos_window  " << dos_window[0] << "  " << dos_window[1] << '\n'
+      << "max_charge_step  " << max_charge_step << '\n'
+      << "max_dmft_step  " << max_dmft_step << '\n'
+      << "dmft_step_first  " << dmft_step_first << '\n'
+      << "max_dft_step  " << max_dft_step << '\n'
       << "delta_sigma  " << delta_sigma << '\n'
       << "delta_rho  " << delta_rho << '\n'
       << "mixing_step  " << mixing_step << '\n'
       << "charge_mix_param  " << charge_mix_param << '\n'
-      << "mc_step  " << MC_step << '\n';
+      << "mc_step  " << mc_step << '\n';
     if(flag_impurity_solver == 6) GLV::ofs_running
       << "comctqmc_nproc  " << comctqmc_nproc << '\n'
       << "warmup  " << warmup << '\n'
@@ -380,11 +380,11 @@ namespace DMFT
     else if(word=="comctqmc_evalsim") return &comctqmc_evalsim;
     else if(word=="comctqmc_launcher") return &comctqmc_launcher;
     else if(std::strcmp("double_counting", word.c_str())==0) return &flag_double_counting;
-    else if(std::strcmp("max_charge_step", word.c_str())==0) return &charge_step_max;
-    else if(std::strcmp("max_dmft_step", word.c_str())==0) return &DMFT_step_max;
-    else if(std::strcmp("dmft_step_first", word.c_str())==0) return &DMFT_step_first;
-    else if(std::strcmp("max_dft_step", word.c_str())==0) return &DFT_step_max;
-    else if(std::strcmp("mc_step", word.c_str())==0) return &MC_step;
+    else if(std::strcmp("max_charge_step", word.c_str())==0) return &max_charge_step;
+    else if(std::strcmp("max_dmft_step", word.c_str())==0) return &max_dmft_step;
+    else if(std::strcmp("dmft_step_first", word.c_str())==0) return &dmft_step_first;
+    else if(std::strcmp("max_dft_step", word.c_str())==0) return &max_dft_step;
+    else if(std::strcmp("mc_step", word.c_str())==0) return &mc_step;
     else if(std::strcmp("hyb_func", word.c_str())==0) return &hyb_func;
     else if(std::strcmp("hyf_xc_alpha", word.c_str())==0) return &hyf_xc_alpha;
     else if(std::strcmp("hyf_dc_shift_d", word.c_str())==0) return &hyf_dc_shift_d;

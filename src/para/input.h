@@ -19,8 +19,8 @@ namespace DMFT
 
     const void* parameter(char* keyword);    //   interfaces
 
-    const std::vector<double>& projection_window(){return this->proj_window;}
-    const std::vector<double>& spectra_window(){return this->DOS_window;}
+    const std::vector<double>& get_projection_window(){return this->projection_window;}
+    const std::vector<double>& spectra_window(){return this->dos_window;}
 
     private:
     // Input parameters read from DMFT.in, with defaults assigned in read().
@@ -34,16 +34,16 @@ namespace DMFT
     int flag_interaction_type;        // density_density:1, kanamori:2, slater_condon:3, tensor:4; default:1
     int flag_double_counting;       //fll:1, nominal:2, arbitrary:3;   default:1
     double nf;                      //nominal occupation; required for double_counting=nominal, no default
-    int charge_step_max;            //number of the maximum charge self-consistent interation loop; default:1
-    int DMFT_step_max;              //number of the maximum DMFT interation step under each charge loop; default:1
-    int DMFT_step_first;            //DMFT step limit under the first charge loop; default:DMFT_step_max
-    int DFT_step_max;               //number of the maximum DFT interation step under each charge loop; default:1
-    long long MC_step;              //number of MC sampling steps; default:5000000
+    int max_charge_step;            //number of the maximum charge self-consistent interation loop; default:1
+    int max_dmft_step;              //number of the maximum DMFT interation step under each charge loop; default:1
+    int dmft_step_first;            //DMFT step limit under the first charge loop; default:max_dmft_step
+    int max_dft_step;               //number of the maximum DFT interation step under each charge loop; default:1
+    long long mc_step;              //number of MC sampling steps; default:5000000
     long long warmup;               //warmup updates per chain; currently used only by ComCTQMC; default:100000
     int comctqmc_nproc;             //0: use allocated physical cores on the launching node
     std::string comctqmc_exe, comctqmc_evalsim, comctqmc_launcher;
-    std::vector<double> proj_window;  //projection_window: energy window for hybridization function
-    std::vector<double> DOS_window;   //dos_window: energy window for DOS
+    std::vector<double> projection_window;  //projection_window: energy window for hybridization function
+    std::vector<double> dos_window;   //dos_window: energy window for DOS
     bool hyb_func;                  //Whether hybrid functional is used or not; default:false
     double hyf_xc_alpha;            //The mixing factor in hybrid funtional; default:1.0;
     int flag_hyf_dc_mode;           //jacob:1; jacob_dp:2; default:1

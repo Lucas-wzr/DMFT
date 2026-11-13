@@ -127,7 +127,7 @@ namespace DFT_plus_DMFT
     debug::codestamp("Hilbert_space::deter_bands_window_first_charge_step");
 
     const std::vector<std::vector<std::vector<double>>>& KS_eigenvalues = band.enk();
-    const auto& Ewindow = in.projection_window();
+    const auto& Ewindow = in.get_projection_window();
     const auto& DOS_window = in.spectra_window();
 
     //===================Correlated bands window=========================
