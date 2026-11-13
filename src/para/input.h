@@ -33,7 +33,7 @@ namespace DMFT
     int flag_impurity_solver;    
     int flag_interaction_type;        // density_density:1, kanamori:2, slater_condon:3, tensor:4; default:1
     int flag_double_counting;       //fll:1, nominal:2, arbitrary:3;   default:1
-    double nf;                      //number of correlated electrons used in the double countings; default:1.0
+    double nf;                      //nominal occupation; required for double_counting=nominal, no default
     int charge_step_max;            //number of the maximum charge self-consistent interation loop; default:1
     int DMFT_step_max;              //number of the maximum DMFT interation step under each charge loop; default:1
     int DMFT_step_first;            //DMFT step limit under the first charge loop; default:DMFT_step_max

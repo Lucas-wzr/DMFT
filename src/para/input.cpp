@@ -32,7 +32,6 @@ namespace DMFT
     flag_impurity_solver = 4;
     flag_interaction_type = 1;
     flag_double_counting = 1;
-    nf = 1.0;
     proj_window = {-5.0, 5.0};
     charge_step_max = DMFT_step_max = DFT_step_max = 1;
     MC_step = 5000000;
@@ -221,6 +220,8 @@ namespace DMFT
     if(!input_entries.count("dmft_step_first")) DMFT_step_first = DMFT_step_max;
 
     // 步骤 4：在派生计算之前校验输入及组合。当前没有无条件必填项。
+    if(flag_double_counting == 2 && !input_entries.count("nf"))
+      fail("nf", "required when double_counting is nominal; specify the nominal occupation explicitly");
     // 后端和求解器限制沿用原实现，不增加新的物理参数范围约束。
     #ifndef __FHIaims
       if(flag_DFT_solver == 1) fail("dft_solver", "FHI-aims support is not compiled in");
