@@ -94,10 +94,10 @@ bool Charge_SCF_abacus::update(solver& task, int charge_step)
     auto& in=task.pars.in;
     auto& band=task.pars.bands;
     auto& atom=task.pars.atom;
-    if(band.soc() || band.nspins()!=1 || *(int*)in.parameter("magnetism")!=3)
+    if(band.soc() || band.nspins()!=1 || in.get().flag_magnetism!=3)
         throw std::runtime_error("ABACUS charge backend currently requires paramagnetic non-SOC nspin=1");
-    const double beta=*(double*)in.parameter("beta");
-    const double mixing=*(double*)in.parameter("charge_mix_param");
+    const double beta=in.get().beta;
+    const double mixing=in.get().charge_mix_param;
     task.imp.sigma.subtract_double_counting(0);
     const auto& local=task.imp.sigma.correlated_sigma(0);
     const auto& window=task.space.wbands2ibands()[0];
@@ -200,6 +200,6 @@ bool Charge_SCF_abacus::update(solver& task, int charge_step)
         GLV::ofs_running<<"ABACUS charge step "<<charge_step<<": density residual = "<<residual
                         <<", electrons = "<<grid_number<<", density mu (Hartree) = "<<mu<<std::endl;
     }
-    return residual<*(double*)in.parameter("delta_rho");
+    return residual<in.get().delta_rho;
 }
 }

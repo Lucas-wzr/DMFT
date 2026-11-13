@@ -5,24 +5,8 @@
 
 namespace DMFT
 {
-  class input_info
+  struct input_parameters
   {
-    public:
-    input_info(){;}
-    ~input_info(){;}
-
-    bool read();
-
-    bool read_parameter(char* keyword, std::vector<std::string>& val, int count=1);
-
-    static std::string strtolower(std::string in_str);
-
-    const void* parameter(char* keyword);    //   interfaces
-
-    const std::vector<double>& get_projection_window(){return this->projection_window;}
-    const std::vector<double>& spectra_window(){return this->dos_window;}
-
-    private:
     // 第 1 类：条件必填参数，无默认值；无条件必填是条件恒为 true 的特例。
     double nf;                      //nominal occupation; required for double_counting=nominal, no default
 
@@ -82,12 +66,22 @@ namespace DMFT
     std::string dft_solver_exe;     //the executable of DFT solver
 
   };
+
+  class input_info
+  {
+    public:
+    bool read();
+
+    bool read_parameter(char* keyword, std::vector<std::string>& val, int count=1);
+
+    static std::string strtolower(std::string in_str);
+
+    const input_parameters& get() const {return params;}
+
+    private:
+    input_parameters params;
+  };
 }
 
-// TODO: Improve parameter management, drawing on ABACUS and FHI-aims:
-// - Separate user inputs, derived parameters, and mutable runtime state.
-// - Organize reading/defaults, validation, and derived calculations explicitly.
-// - Replace parameter(keyword) returning const void* with typed accessors or
-//   read-only typed members, so callers do not need manual pointer casts.
-// - Choose strings or named enums for options as appropriate; avoid requiring
-//   all options to be numeric flags or introducing a full registration framework.
+// TODO: Choose strings or named enums for options as appropriate; avoid requiring
+// all options to be numeric flags or introducing a full registration framework.

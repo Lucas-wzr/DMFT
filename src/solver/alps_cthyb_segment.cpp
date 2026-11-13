@@ -37,8 +37,8 @@ namespace DMFT
     const std::vector<int>& norb_sub = atom.iatom_norb();
     const bool soc = band.soc();
     const int nspin = band.nspins();
-    const int ntau = *(int*)in.parameter("n_tau");
-    const int nomega = *(int*)in.parameter("n_omega");
+    const int ntau = in.get().n_tau;
+    const int nomega = in.get().n_omega;
 
     //Create directory impurity 
     std::string dir_impurity_solving = "dmft";
@@ -115,12 +115,12 @@ namespace DMFT
         std::string param_file = current_dir+"/hyb.param";
         std::ofstream ofs_param(param_file.c_str(), std::ios::out);
 
-        long long sweeps = *(long long*)in.parameter("mc_step")/20;
+        long long sweeps = in.get().mc_step/20;
 
         ofs_param << "FLAVORS=" << 2*m_tot << '\n';
-        ofs_param << "N_TAU=" << *(int*)in.parameter("n_tau") << '\n';        
+        ofs_param << "N_TAU=" << in.get().n_tau << '\n';
         ofs_param << "BETA=" << std::fixed << std::setprecision(9) 
-        << *(double*)in.parameter("beta")/GLC::Hartree_to_eV << '\n';  //Hartree to eV
+        << in.get().beta/GLC::Hartree_to_eV << '\n';  //Hartree to eV
         ofs_param << "THERMALIZATION=100000\n";
         ofs_param << "N_MEAS=20\n";
         ofs_param << "SWEEPS=" << sweeps << '\n';
@@ -129,7 +129,7 @@ namespace DMFT
         ofs_param << "U_MATRIX=Uij.dat\n";
         ofs_param << "N_LEGENDRE=50\n";
         ofs_param << "N_HISTOGRAM_ORDERS=200\n";
-        ofs_param << "NMATSUBARA=" << *(int*)in.parameter("n_omega") << '\n';
+        ofs_param << "NMATSUBARA=" << in.get().n_omega << '\n';
         
         ofs_param.close();
 

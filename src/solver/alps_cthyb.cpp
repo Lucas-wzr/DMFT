@@ -38,8 +38,8 @@ namespace DMFT
     const std::vector<int>& norb_sub = atom.iatom_norb();
     const bool soc = band.soc();
     const int nspin = band.nspins();
-    const int ntau = *(int*)in.parameter("n_tau");
-    const int nomega = *(int*)in.parameter("n_omega");
+    const int ntau = in.get().n_tau;
+    const int nomega = in.get().n_omega;
     double zero=0.0;
 
     //Create directory impurity 
@@ -139,10 +139,10 @@ namespace DMFT
       ofs_input << "model.hopping_matrix_input_file=\"hopping.txt\"\n";
       ofs_input << "model.delta_input_file=\"delta.txt\"\n";
       ofs_input << "model.beta=" << std::fixed << std::setprecision(9) 
-      << *(double*)in.parameter("beta")/GLC::Hartree_to_eV << '\n';  //Hartree to eV
-      ofs_input << "model.n_tau_hyb=" << *(int*)in.parameter("n_tau") << '\n';
-      ofs_input << "measurement.G1.n_tau=" << *(int*)in.parameter("n_tau") << '\n';
-      ofs_input << "measurement.G1.n_matsubara=" << *(int*)in.parameter("n_omega") << '\n';
+      << in.get().beta/GLC::Hartree_to_eV << '\n';  //Hartree to eV
+      ofs_input << "model.n_tau_hyb=" << in.get().n_tau << '\n';
+      ofs_input << "measurement.G1.n_tau=" << in.get().n_tau << '\n';
+      ofs_input << "measurement.G1.n_matsubara=" << in.get().n_omega << '\n';
       ofs_input.close();
 
       //===========================================
@@ -541,7 +541,7 @@ namespace DMFT
     const std::vector<int>& norb_sub = atom.iatom_norb();
     const bool soc = band.soc();
     const int nspin = band.nspins();
-    const int nomega = *(int*)in.parameter("n_omega");
+    const int nomega = in.get().n_omega;
 
     std::string dir_impurity_solving = "impurity_solving";
 

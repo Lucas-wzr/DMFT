@@ -44,8 +44,8 @@ namespace DMFT
     const std::vector<int>& norb_sub = atom.iatom_norb();
     const bool soc = band.soc();
     const int nspin = band.nspins();
-    const int ntau = *(int*)in.parameter("n_tau");
-    const int nomega = *(int*)in.parameter("n_omega");
+    const int ntau = in.get().n_tau;
+    const int nomega = in.get().n_omega;
     double zero=0.0;
 
     //Create directory impurity 
@@ -238,7 +238,7 @@ namespace DMFT
     ofs << "ncfgs = " << (int)std::pow(2,2*nband) << "     #number of atomic eigenstates" << std::endl;
     ofs << "mune = 0.0     #chemical potential" << std::endl;
     ofs << "beta = " << std::fixed << std::setprecision(9) 
-        << *(double*)in.parameter("beta")/GLC::Hartree_to_eV 
+        << in.get().beta/GLC::Hartree_to_eV
         << "     #inverse temperature" << std::endl;
     
     ofs << "\n###   setup common variables for quantum impurity solver  ###" << std::endl;
@@ -247,15 +247,15 @@ namespace DMFT
     ofs << "svmax = 80        #maximum expansion order for svd polynomial" << std::endl;
     ofs << "svgrd = 2001      #number of mesh points for svd polynomial [-1,1]" << std::endl;
     ofs << "mkink = 1024      #maximum perturbation expansion order" << std::endl;
-    ofs << "mfreq = " << *(int*)in.parameter("n_omega")   //100eV
+    ofs << "mfreq = " << in.get().n_omega   //100eV
         << "        #maximum number of matsubara frequency points" << std::endl;
-    ofs << "nfreq = " << *(int*)in.parameter("n_omega")/4         //~25eV
+    ofs << "nfreq = " << in.get().n_omega/4         //~25eV
         << "        #number of sampled matsubara frequency points" << std::endl;
-    ofs << "ntime = " << *(int*)in.parameter("n_tau") 
+    ofs << "ntime = " << in.get().n_tau
         << "        #number of time slices" << std::endl;
     ofs << "nflip = 20000     #flip period for spin up and spin down states" << std::endl;
     ofs << "ntherm = 200000   #flip period for spin up and spin down states" << std::endl;
-    ofs << "nsweep = " << *(long long*)in.parameter("mc_step") 
+    ofs << "nsweep = " << in.get().mc_step
         << "        #number of Monte Carlo sweeping steps" << std::endl;
     ofs << "nwrite = 2000000  #output period" << std::endl;
     ofs << "nclean = 100000   #clean update period" << std::endl;
@@ -368,7 +368,7 @@ namespace DMFT
     const std::vector<int>& norb_sub = atom.iatom_norb();
     const bool soc = band.soc();
     const int nspin = band.nspins();
-    const int magnetism = *(int*)in.parameter("magnetism");
+    const int magnetism = in.get().flag_magnetism;
 
     int count = 0;
 

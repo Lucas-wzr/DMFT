@@ -187,9 +187,9 @@
 
 `interaction_type`、`comctqmc_nproc`、`warmup`、`comctqmc_exe`、`comctqmc_evalsim`、`comctqmc_launcher`、`projection_min_weight` 以及 `impurity_solver=comctqmc` 均沿用 develop 的默认值、生效条件与校验。ComCTQMC 的五个关键词在任何求解器下都被接受，取值和日志只在 `impurity_solver=comctqmc` 时生效。
 
-主流程不再逐参数调用 `read_parameter()`。该函数暂时保留供 `correlated_atoms.cpp` 读取 `local_symmetry`，仍保留原来的缺省异常约定，并同步支持制表符和末尾无换行。`parameter()` 的旧访问接口仍保留。遗留的 `input_info::test()` 和 `input_info::out()` 已删除，`parameters::out()` 中的对应调用也已移除；输入校验和最终参数日志由 `read()` 负责。
+主流程不再逐参数调用 `read_parameter()`。该函数暂时保留供 `correlated_atoms.cpp` 读取 `local_symmetry`，仍保留原来的缺省异常约定，并同步支持制表符和末尾无换行。旧 `parameter()` 字符串分发及 `const void*` 接口已删除，参数集中保存在 `input_parameters` 结构体中，保留四类分组；`input_info` 私有持有该结构体，通过唯一的 `const input_parameters& get() const` 返回只读引用。例如 `in.get().temperature`、`in.get().max_dmft_step`，字符串和窗口也直接通过成员读取，不再逐参数定义 getter。读取、默认值补齐和校验仍由 `input_info::read()` 负责。下游无需手动转换指针类型。遗留的 `input_info::test()` 和 `input_info::out()` 已删除，`parameters::out()` 中的对应调用也已移除；输入校验和最终参数日志由 `read()` 负责。
 
-下面七步描述更完整的后续设计，其中来源标注、统一参数定义表、类型明确的访问接口及新增物理约束尚未全部实现。
+下面七步描述更完整的后续设计，其中来源标注、统一参数定义表、新增物理约束尚未全部实现；类型明确的只读访问接口已完成。
 
 ### 建议整理后的执行步骤
 
@@ -235,19 +235,19 @@
 
 #### 步骤 7：输出最终参数，交给计算模块
 
-统一记录最终生效值、单位和来源，区分用户输入、固定或条件默认、自动默认以及纯派生值。成功完成后通过有明确类型的只读接口提供给后续计算。
+统一记录最终生效值、单位和来源，区分用户输入、固定或条件默认、自动默认以及纯派生值。成功完成后通过 `get()` 返回的参数结构体常量引用提供给后续计算（已实现）。
 
 备注：不覆盖原始 `DMFT.in`，不在默认值尚未补齐时打印“最终参数”。采用足够的数值精度，并明确未生效项。初始化未通过时应停止进入求解流程，不能让其他模块使用半初始化配置。运行中的迭代状态仍由求解模块维护。
 
 ### 修改边界
 
-本次已重组 `read()` 并替换主解析流程，保留下游访问接口；未开放 `n_tau/n_omega` 手动输入，也未改变物理默认值。后续继续完善参数来源日志和类型明确的访问接口时，应保持已有有效输入的数值结果一致。
+本次已重组 `read()` 并替换主解析流程，下游已迁移至类型明确的只读访问接口；未开放 `n_tau/n_omega` 手动输入，除已取消的 nominal 模式 `nf=1.0` 默认值外，其余物理默认值不变。后续继续完善参数来源日志时，应保持已有有效输入的数值结果一致。
 
 ### 与 develop 的同步要求
 
-本分支最初基于 `init`，而 `interaction_type`、ComCTQMC 相关参数和 `projection_min_weight` 是之后经 `general-interaction` 并入 develop 的。rebase 时若只合并 `parameter()` 的分发分支、却漏掉 `input.h` 的成员声明和 `read()` 的解析块，会直接编译失败；更隐蔽的情况是成员仍声明但不再赋值，下游读到未初始化值而不报错。
+本分支最初基于 `init`，而 `interaction_type`、ComCTQMC 相关参数和 `projection_min_weight` 是之后经 `general-interaction` 并入 develop 的。rebase 时若只合并 `input_parameters` 的成员及 `get()` 下游调用、却漏掉 `input.h` 的成员声明和 `read()` 的解析块，会直接编译失败；更隐蔽的情况是成员仍声明但不再赋值，下游读到未初始化值而不报错。
 
-因此每次 rebase 后必须核对三处一致：`input.h` 的成员声明、`read()` 的赋值与 `recognized` 集合、`parameter()` 的分发分支。
+因此每次 rebase 后必须核对三处一致：`input.h` 的成员声明、`read()` 的赋值与 `recognized` 集合、`input_parameters` 的成员及 `get()` 下游调用。
 
 `dmft_step_first` 曾被误删，现已恢复。它在 `init` 中存在，用于让首个电荷循环采用不同于 `max_dmft_step` 的 DMFT 步数上限：首轮从 KS 密度出发、自能远离收敛，需要更多步；后续循环密度只被微调，可少跑以节省 QMC 采样。未指定时取 `max_dmft_step`，因此默认行为与无此参数一致。
 

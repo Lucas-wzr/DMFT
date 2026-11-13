@@ -24,7 +24,7 @@ namespace DMFT
     const int ineq_num = atom.inequ_atoms();
     const std::vector<int>& norb_sub = atom.iatom_norb();
     const int nspin = band.nspins();
-    const int magnetism = *(int*)in.parameter("magnetism");
+    const int magnetism = in.get().flag_magnetism;
 
     const std::complex<double> zeroc(0.0,0.0);
     double omega;

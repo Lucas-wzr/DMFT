@@ -790,8 +790,8 @@ namespace DMFT
     const int ineq_num = atom.inequ_atoms();
     const std::vector<int>& norb_sub = atom.iatom_norb();
     const int nspin = band.nspins();
-    const int nomega = *(int*)in.parameter("n_omega");
-    const double sc_criteria = *(double*)in.parameter("delta_sigma");
+    const int nomega = in.get().n_omega;
+    const double sc_criteria = in.get().delta_sigma;
 
     std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>&
         sigma_new = this->sigma.sigma_new(flag_axis);
@@ -843,7 +843,6 @@ namespace DMFT
       }
     }
 
-    //const double alpha = *(double*)in.parameter("sigma_mix");
     double alpha = 0.2;
     if(!this->alpha_initialized){
       alpha = 1.0;   
@@ -873,13 +872,13 @@ namespace DMFT
   {
     debug::codestamp("impurity::update_self_energy");
 
-    const double beta = *(double*)in.parameter("beta");
+    const double beta = in.get().beta;
     const std::complex<double> im = std::complex<double>(0.0,1.0);
 
     const int ineq_num = atom.inequ_atoms();
     const std::vector<int>& norb_sub = atom.iatom_norb();
     const int nspin = band.nspins();
-    const int nomega = *(int*)in.parameter("n_omega"); 
+    const int nomega = in.get().n_omega;
 
     std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>&
         sigma_new = this->sigma.sigma_imag.sigma_new_access();
@@ -927,7 +926,7 @@ namespace DMFT
     const std::vector<int>& wbands = space.Wbands();
     const int nprocs = mpi_ntasks();
     const int myid = mpi_rank();
-    const double beta= *(double*)in.parameter("beta");
+    const double beta= in.get().beta;
     const std::vector<int>& sub_norb = atom.iatom_norb();
     const std::vector<std::vector<int>>& orb_index = atom.Im2iorb();
     const int norb = atom.norb();

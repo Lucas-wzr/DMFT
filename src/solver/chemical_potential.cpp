@@ -64,11 +64,11 @@ namespace DFT_plus_DMFT
   {
     debug::codestamp("chemical_potential::evaluate_mu_bisection");
 
-    const double beta = *(double*)in.parameter("beta");
-    const int nomega = *(int*)in.parameter("n_omega");
+    const double beta = in.get().beta;
+    const int nomega = in.get().n_omega;
     const int nks=band.nk();
     const int nspin=band.nspins();
-    const int magnetism = *(int*)in.parameter("magnetism");
+    const int magnetism = in.get().flag_magnetism;
     const std::vector<int>& wbands=space.Wbands();
     const int n_valence = space.valence();
     const std::vector<double>& window = space.Ener_window();
@@ -299,7 +299,7 @@ namespace DFT_plus_DMFT
   {
     debug::codestamp("chemical_potential::evaluate_mu_bisection_DFT");
 
-    const double beta = *(double*)in.parameter("beta");
+    const double beta = in.get().beta;
     const int nks=band.nk();
     const int nspin=band.nspins();
     const std::vector<int>& wbands=space.Wbands();
@@ -427,7 +427,7 @@ namespace DFT_plus_DMFT
 
   const int nks = band.nk();
   const int nspin = band.nspins();
-  const int magnetism = *(int*)in.parameter("magnetism");
+  const int magnetism = in.get().flag_magnetism;
   const std::vector<int>& wbands = space.Wbands();
   const std::vector<double>& freq = sigma.sigma_imag.Matsubara_freq();
   const int nomega = (int)freq.size();

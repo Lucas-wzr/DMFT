@@ -30,7 +30,7 @@ void spectrum::eva_spectrum(
   const int nomega = sigma.sigma_real.nomega();
   const int nks=band.nk();
   const int nspin=band.nspins();
-  const int mag = *(int*)in.parameter("magnetism");
+  const int mag = in.get().flag_magnetism;
   const std::vector<int>& wbands=space.Wbands();
   const int ineq_num = atom.inequ_atoms();
   const std::vector<int>& norb_sub = atom.iatom_norb();
@@ -165,7 +165,7 @@ void spectrum::eva_spectrum_normalization(
   const int nomega = sigma.sigma_real.nomega();
   const int nks=band.nk();
   const int nspin=band.nspins();
-  const int mag = *(int*)in.parameter("magnetism");
+  const int mag = in.get().flag_magnetism;
   const std::vector<int>& wbands=space.Wbands();
   const std::vector<int>& DOS_wbands=space.DOSWbands();
   const std::vector<std::vector<int>>& corr_DOS_bands=space.corr_bands2DOS_bands();

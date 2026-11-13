@@ -42,8 +42,8 @@ namespace DMFT
     const std::vector<int>& norb_sub = atom.iatom_norb();
     const bool soc = band.soc();
     const int nspin = band.nspins();
-    const int ntau = *(int*)in.parameter("n_tau");
-    const int nomega = *(int*)in.parameter("n_omega");
+    const int ntau = in.get().n_tau;
+    const int nomega = in.get().n_omega;
     double zero=0.0;
 
     //Create directory impurity 
@@ -127,7 +127,7 @@ namespace DMFT
       ofs_input << "&Model_Parameter\n";
       ofs_input << "      nOrbit = " << m_tot << '\n';
       ofs_input << "        Beta = " << std::fixed << std::setprecision(9) 
-                << *(double*)in.parameter("beta")/GLC::Hartree_to_eV  << '\n';
+                << in.get().beta/GLC::Hartree_to_eV  << '\n';
       ofs_input << "          xU = " << atom.Uval(iatom)*GLC::Hartree_to_eV  << '\n';
       ofs_input << "          xJ = " << atom.Jval(iatom)*GLC::Hartree_to_eV  << '\n';
       ofs_input << "      nOmega = " << nomega << '\n';
@@ -136,7 +136,7 @@ namespace DMFT
 
       ofs_input << "&MC_Parameter\n";
       ofs_input << "   nWarm = 100000\n";
-      ofs_input << "   nMeasure = " << *(long long*)in.parameter("mc_step")/10 << '\n';
+      ofs_input << "   nMeasure = " << in.get().mc_step/10 << '\n';
       ofs_input << "    nBin = 10\n";
       ofs_input << "/\n";
 
@@ -271,7 +271,7 @@ namespace DMFT
     const std::vector<int>& norb_sub = atom.iatom_norb();
     const bool soc = band.soc();
     const int nspin = band.nspins();
-    const int magnetism = *(int*)in.parameter("magnetism");
+    const int magnetism = in.get().flag_magnetism;
 
     double omega, real, imag;
     std::string str_tmp;
