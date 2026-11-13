@@ -24,7 +24,8 @@ namespace DMFT
   {
     debug::codestamp("input_info::read");
 
-    // 步骤 1：设置固定默认值。依赖其他输入的默认值留到步骤 3。
+    // 步骤 1：仅为第 2 类参数设置固定默认值。
+    // 第 1 类无默认值，第 4 类待依赖确定后补齐，第 3 类在校验后计算。
     calculation_type = 0;
     flag_DFT_solver = 1;
     temperature = 300.0;
@@ -57,7 +58,6 @@ namespace DMFT
     int local_symmetry = 0;
 
     // 步骤 2：一次读完文件，记录显式输入，再进行类型转换。
-    // 缺省不是异常；记录是否出现，避免用 0 或 -1 代替“未输入”。
     std::map<std::string, std::vector<std::string>> input_entries;
     std::ifstream ifs("DMFT.in");
     if(!ifs) {
@@ -70,6 +70,7 @@ namespace DMFT
       std::cerr << ": " << key << ": " << message << std::endl;
       std::exit(EXIT_FAILURE);
     };
+
     std::string line;
     while(std::getline(ifs, line)) {
       const auto comment = line.find('#');
@@ -98,7 +99,6 @@ namespace DMFT
     };
 
     // real：读取 key 对应的单个浮点数，写入 value 引用的原变量。
-    // 未提供时不修改 value；拒绝非法文本、超出范围的数值及 NaN/Inf。
     auto real = [&](const std::string& key, double& value) {
       if(!supplied(key, 1)) return;
       const std::string& text = input_entries.at(key)[0];
@@ -158,6 +158,7 @@ namespace DMFT
       value = input_entries.at(key)[0];
     };
 
+    // 第 2 类：用户输入覆盖固定默认值；未填写时保留默认值。
     option("calculation", calculation_type, {{"scf", 0}, {"spectra", 1}});
     option("dft_solver", flag_DFT_solver, {{"aims", 1}, {"abacus", 2}});
     real("temperature", temperature);
@@ -168,12 +169,9 @@ namespace DMFT
     option("interaction_type", flag_interaction_type,
            {{"density_density", 1}, {"kanamori", 2}, {"slater_condon", 3}, {"tensor", 4}});
     option("double_counting", flag_double_counting, {{"fll", 1}, {"nominal", 2}, {"arbitrary", 3}});
-    real("nf", nf);
     window("projection_window", projection_window);
-    window("dos_window", dos_window);
     integer("max_charge_step", max_charge_step);
     integer("max_dmft_step", max_dmft_step);
-    integer("dmft_step_first", dmft_step_first);
     integer("max_dft_step", max_dft_step);
     real("delta_sigma", delta_sigma);
     real("delta_rho", delta_rho);
@@ -207,6 +205,15 @@ namespace DMFT
         *steps[i] = static_cast<int>(value);
       }
     }
+    // 第 1 类：读取条件必填参数，不补默认值；必填条件在步骤 4 检查。
+    real("nf", nf);
+
+    // 第 4 类：先读取用户覆盖值；未填写的项在步骤 3 自动补齐。
+    integer("dmft_step_first", dmft_step_first);
+    window("dos_window", dos_window);
+
+    // 第 3 类没有独立输入关键词，统一在步骤 5 计算。
+
     // 这两个历史关键词此前接受但不参与计算，暂保留兼容并明确提示。
     for(const auto& key : {"dft_solver_exe", "hybrid_xc_coeff"}) {
       recognized.insert(key);
@@ -215,11 +222,11 @@ namespace DMFT
     for(const auto& entry : input_entries)
       if(!recognized.count(entry.first)) fail(entry.first, "unsupported keyword");
 
-    // 步骤 3：补齐依赖默认值。只处理未显式输入的项，与文件行顺序无关。
+    // 步骤 3：补齐第 4 类的自动默认值。只处理未显式输入的项，与文件行顺序无关。
     if(!input_entries.count("dos_window")) dos_window = projection_window;
     if(!input_entries.count("dmft_step_first")) dmft_step_first = max_dmft_step;
 
-    // 步骤 4：在派生计算之前校验输入及组合。当前没有无条件必填项。
+    // 步骤 4：检查第 1 类的必填条件，以及第 2、4 类的取值和组合约束。
     if(flag_double_counting == 2 && !input_entries.count("nf"))
       fail("nf", "required when double_counting is nominal; specify the nominal occupation explicitly");
     // 后端和求解器限制沿用原实现，不增加新的物理参数范围约束。
@@ -246,7 +253,7 @@ namespace DMFT
       if(mc_step <= 0) fail("mc_step", "must be positive");
     }
 
-    // 步骤 5：计算纯派生量。温度用 K，beta 用 Hartree^-1。
+    // 步骤 5：计算第 3 类纯派生量。温度用 K，beta 用 Hartree^-1。
     // 网格保持先截断、奇数再加一；转换前检查范围，避免整数溢出。
     beta = GLC::Hartree_to_eV/(temperature*GLC::K_BOLTZMAN_EV);
     const double tau_points = 25/(temperature*GLC::K_BOLTZMAN_EV);

@@ -23,7 +23,10 @@ namespace DMFT
     const std::vector<double>& spectra_window(){return this->dos_window;}
 
     private:
-    // Input parameters read from DMFT.in, with defaults assigned in read().
+    // 第 1 类：条件必填参数，无默认值；无条件必填是条件恒为 true 的特例。
+    double nf;                      //nominal occupation; required for double_counting=nominal, no default
+
+    // 第 2 类：有默认值的参数，默认值在 read() 中设置。
     // Integer flags and hyb_func are internal representations of input options.
     int flag_DFT_solver;            //1:aims, 2:ABACUS
     double temperature;             //unit:Kelvin; default:300
@@ -33,17 +36,14 @@ namespace DMFT
     int flag_impurity_solver;    
     int flag_interaction_type;        // density_density:1, kanamori:2, slater_condon:3, tensor:4; default:1
     int flag_double_counting;       //fll:1, nominal:2, arbitrary:3;   default:1
-    double nf;                      //nominal occupation; required for double_counting=nominal, no default
     int max_charge_step;            //number of the maximum charge self-consistent interation loop; default:1
     int max_dmft_step;              //number of the maximum DMFT interation step under each charge loop; default:1
-    int dmft_step_first;            //DMFT step limit under the first charge loop; default:max_dmft_step
     int max_dft_step;               //number of the maximum DFT interation step under each charge loop; default:1
     long long mc_step;              //number of MC sampling steps; default:5000000
     long long warmup;               //warmup updates per chain; currently used only by ComCTQMC; default:100000
     int comctqmc_nproc;             //0: use allocated physical cores on the launching node
     std::string comctqmc_exe, comctqmc_evalsim, comctqmc_launcher;
     std::vector<double> projection_window;  //projection_window: energy window for hybridization function
-    std::vector<double> dos_window;   //dos_window: energy window for DOS
     bool hyb_func;                  //Whether hybrid functional is used or not; default:false
     double hyf_xc_alpha;            //The mixing factor in hybrid funtional; default:1.0;
     int flag_hyf_dc_mode;           //jacob:1; jacob_dp:2; default:1
@@ -67,14 +67,18 @@ namespace DMFT
     double cwf_t;                   //CWF window smoothing energy, independent of temperature; unit:eV; default:0.01
     double projection_min_weight;   //Minimum eigenvalue of the unweighted projector Gram matrix; default:0.9
 
-    // Derived parameters computed in read(); not independent DMFT.in keywords.
+    // 第 3 类：纯派生参数，不接受独立的 DMFT.in 输入。
     double beta;                   //from temperature: 1/(k_b*T); unit:1/Hartree
     // T in K, k_B in eV/K; truncate to int, then add 1 if odd.
     int n_tau;                     //CTQMC imaginary-time segments: int(25 eV/(k_B*T))
     int n_omega;                   //Matsubara frequency points: int(100 eV/(PI*k_B*T))
     bool flag_restart;             //true if start_charge_step>1 or start_DMFT_step>1
 
-    // Legacy member: reading dft_solver_exe is currently disabled in read().
+    // 第 4 类：可由用户覆盖的自动参数，未填写时根据其他参数补齐。
+    int dmft_step_first;            //DMFT step limit under the first charge loop; default:max_dmft_step
+    std::vector<double> dos_window;   //dos_window: energy window for DOS
+
+    // 历史兼容成员：不参与上述有效参数分类，read() 忽略该输入。
     std::string dft_solver_exe;     //the executable of DFT solver
 
   };
