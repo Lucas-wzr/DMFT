@@ -30,7 +30,7 @@ namespace DFT_plus_DMFT
         const double CWF_ep0,
         const double CWF_ep1,
         const double CWF_T,
-        const double projection_min_weight = 0.9);
+        const double projection_min_weight = 0.3);
 
     void evalute_projector_k(
           DFT_output::overlap_matrix& ovlp,

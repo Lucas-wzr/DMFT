@@ -50,7 +50,7 @@ namespace DMFT
     double cwf_ep0;                 //lower CWF window edge relative to E_F; unit:eV; default:-5.0
     double cwf_ep1;                 //upper CWF window edge relative to E_F; unit:eV; default:5.0
     double cwf_t;                   //CWF window smoothing energy, independent of temperature; unit:eV; default:0.01
-    double projection_min_weight;   //Minimum eigenvalue of the unweighted projector Gram matrix; default:0.9
+    double projection_min_weight;   //Minimum eigenvalue of the unweighted projector Gram matrix; default:0.3
 
     // 第 3 类：纯派生参数，不接受独立的 DMFT.in 输入。
     double beta;                   //from temperature: 1/(k_b*T); unit:1/Hartree

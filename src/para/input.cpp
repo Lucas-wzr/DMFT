@@ -49,7 +49,7 @@ namespace DMFT
     params.cwf_ep0 = -5.0;
     params.cwf_ep1 = 5.0;
     params.cwf_t = 0.01;
-    params.projection_min_weight = 0.9;
+    params.projection_min_weight = 0.3;
     params.hyb_func = false;
     params.hyf_xc_alpha = 1.0;
     params.flag_hyf_dc_mode = 1;
