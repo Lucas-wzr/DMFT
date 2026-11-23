@@ -6,8 +6,9 @@
 #include "../para/input.h"
 #include "../global_variables.h"
 #include "../matrix_types.h"
-#include <Eigen/LU>
+#include <Eigen/SVD>
 #include <iostream>
+#include <limits>
 
 #include <cmath>
 #include <sstream>
@@ -248,7 +249,7 @@ namespace DFT_plus_DMFT
     }
 
     //dRrho
-    if(mix_step>1){
+    if(mix_step>1 && this->Rrho.size()>1){
       for(int is=0; is<this->Rrho[0].size(); is++)
         for(int igrid=0; igrid<this->Rrho[0][is].size(); igrid++)
           vector_tmp[is][igrid] = this->Rrho.back()[is][igrid] - 
@@ -271,7 +272,9 @@ namespace DFT_plus_DMFT
   {
     debug::codestamp("Charge_SCF_aims::update_alpha");
 
-    if(mix_step==1) return;
+    // Both mixers use plain linear mixing when there are no history coefficients.
+    alpha.clear();
+    if(mix_step==1 || this->dRrho.empty()) return;
 
     const int n = this->dRrho.size();
 
@@ -298,10 +301,16 @@ namespace DFT_plus_DMFT
 
     MPI_Allreduce(MPI_IN_PLACE, dRR.data(), dRR.size(), MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
-    // Abar is the symmetric residual Gram matrix: Abar * alpha = -dRR.
-    alpha.resize(n);
-    Eigen::Map<Eigen::VectorXd> coefficients(alpha.data(), n);
-    coefficients = Abar.partialPivLu().solve(-dRR);
+    if(!Abar.allFinite() || !dRR.allFinite()) return;
+
+    // Discard weak directions relative to the largest singular value of the Gram matrix.
+    Eigen::JacobiSVD<RealMatrix> svd(Abar, Eigen::ComputeThinU | Eigen::ComputeThinV);
+    svd.setThreshold(std::sqrt(std::numeric_limits<double>::epsilon()));
+    if(svd.info() != Eigen::Success || svd.rank()==0) return;
+
+    const Eigen::VectorXd coefficients = svd.solve(-dRR);
+    if(coefficients.allFinite())
+      alpha.assign(coefficients.data(), coefficients.data()+n);
 
     return;
   }
