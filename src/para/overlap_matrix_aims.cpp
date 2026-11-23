@@ -199,11 +199,10 @@ namespace DFT_output
       const int norb=at_info.norb();
       const std::complex<double> zero(0.0,0.0);
 
-      if(this->ovlp_matrix_k.empty()) this->ovlp_matrix_k.resize(this->n_basis*norb);
-      if(this->ovlp_matrix_work.empty()) this->ovlp_matrix_work.resize(this->n_basis*this->n_basis);
-      if(this->ovlp_localorb_k.empty()) this->ovlp_localorb_k.resize(norb*norb);
+      this->ovlp_matrix_k.resize(this->n_basis, norb);
+      this->ovlp_matrix_work.setZero(this->n_basis, this->n_basis);
+      this->ovlp_localorb_k.resize(norb, norb);
 
-      for(std::complex<double>& iter : this->ovlp_matrix_work) iter = zero;
 
       for(int ibasis_row=0; ibasis_row<this->n_basis; ibasis_row++)
       {
@@ -218,7 +217,7 @@ namespace DFT_output
               index_real += 1;
               int ibasis_col= this->index_col_ham(index_real);
 
-              this->ovlp_matrix_work[ibasis_col*this->n_basis+ibasis_row] += 
+              this->ovlp_matrix_work(ibasis_col, ibasis_row) +=
                   this->ovlp_matrix_real[index_real]*this->k_phase[icell][ik];
             }//i_size
           }
@@ -229,8 +228,8 @@ namespace DFT_output
       {
         for(int ibasis_col=ibasis_row+1; ibasis_col<this->n_basis; ibasis_col++)
         {
-          this->ovlp_matrix_work[ibasis_col*this->n_basis+ibasis_row] = 
-             std::conj(this->ovlp_matrix_work[ibasis_row*this->n_basis+ibasis_col]);
+          this->ovlp_matrix_work(ibasis_col, ibasis_row) =
+             std::conj(this->ovlp_matrix_work(ibasis_row, ibasis_col));
         }
       }
 
@@ -240,8 +239,8 @@ namespace DFT_output
         
         for(int ibasis_row=0; ibasis_row<this->n_basis; ibasis_row++)
         {
-          this->ovlp_matrix_k[ibasis_row*norb+iorb] = 
-            this->ovlp_matrix_work[ibasis_row*this->n_basis+ibasis_col];
+          this->ovlp_matrix_k(ibasis_row, iorb) =
+            this->ovlp_matrix_work(ibasis_row, ibasis_col);
         }//icell
       }//iorb
 
@@ -249,9 +248,8 @@ namespace DFT_output
       {   
         for(int iorb2=0; iorb2<norb; iorb2++)
         {
-          this->ovlp_localorb_k[iorb1*norb+iorb2] = 
-            this->ovlp_matrix_work[ at_info.iorb2ibasis(iorb1)*
-            this->n_basis + at_info.iorb2ibasis(iorb2) ];
+          this->ovlp_localorb_k(iorb1, iorb2) =
+            this->ovlp_matrix_work(at_info.iorb2ibasis(iorb1), at_info.iorb2ibasis(iorb2));
         }//iorb2
       }//iorb1
 
@@ -265,8 +263,8 @@ namespace DFT_output
         for(int ibasis_col=0; ibasis_col<this->n_basis; ibasis_col++)
         {
           ofs << std::setw(5) << ibasis_row << std::setw(5) <<  ibasis_col 
-          << std::setw(15) << std::fixed << std::setprecision(9) << this->ovlp_matrix_work[ibasis_col*this->n_basis+ibasis_row].real()
-          << std::setw(15) << std::fixed << std::setprecision(9) << this->ovlp_matrix_work[ibasis_col*this->n_basis+ibasis_row].imag() << '\n';
+          << std::setw(15) << std::fixed << std::setprecision(9) << this->ovlp_matrix_work(ibasis_col, ibasis_row).real()
+          << std::setw(15) << std::fixed << std::setprecision(9) << this->ovlp_matrix_work(ibasis_col, ibasis_row).imag() << '\n';
         }
       }
       ofs.close();

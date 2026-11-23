@@ -1,6 +1,7 @@
 #ifdef __FHIaims
 
 #include <complex>
+#include "../matrix_types.h"
 #include <vector>
 #include <deque>
 
@@ -15,8 +16,7 @@ namespace DFT_plus_DMFT
     public:
     void output_charge_density_matrix(
           const int nks,
-          std::vector<std::vector<std::vector<
-          std::complex<double>>>>& dens_mat_cmplx);
+          std::vector<std::vector<Matrix>>& dens_mat_cmplx);
 
     void read_charge_density(
           const bool initial_charge,
@@ -24,8 +24,7 @@ namespace DFT_plus_DMFT
 
     void read_charge_density_matrix(
           const int nks,
-          std::vector<std::vector<std::vector<
-          std::complex<double>>>>& dens_mat_cmplx);
+          std::vector<std::vector<Matrix>>& dens_mat_cmplx);
 
     void update_data(const int mix_step, const int max_mixing_step);
 

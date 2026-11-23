@@ -1,12 +1,14 @@
 #include "Anderson_impurity.h"
 #include "../mpi_environment.h"
 #include "math_zone.h"
+#include "../matrix_types.h"
+#include <Eigen/Dense>
 #include "../debug.h"
 #include "../timer.h"
 #include "../constants.h"
 #include "../global_variables.h"
 
-#include <mkl.h>
+using DFT_plus_DMFT::Matrix;
 #include <mpi.h>
 #include <cmath>
 #include <iostream>
@@ -52,7 +54,7 @@ namespace DMFT
   
         this->impurity_level[ineq].resize(nspin);
         for(int is=0; is<nspin; is++)
-          this->impurity_level[ineq][is].resize(m_tot*m_tot, zero);
+          this->impurity_level[ineq][is].setZero(m_tot, m_tot);
       }
     }
 
@@ -62,11 +64,11 @@ namespace DMFT
       const int iatom = atom.ineq_iatom(ineq);
       const int m_tot=norb_sub[iatom];
 
-      std::vector<std::complex<double>> tmp(m_tot*m_tot);
+      Matrix tmp(m_tot, m_tot);
 
       for(int is=0; is<nspin; is++)
       {
-        for(int m_index=0; m_index<m_tot*m_tot; m_index++) tmp[m_index] = zero;
+        tmp.setZero();
 
         const std::vector<std::complex<double>>& dc_term = this->sigma.dc.Vdc()[ineq][is];
 
@@ -77,14 +79,14 @@ namespace DMFT
           ik_count++;
 
           for(int m=0; m<m_tot; m++)
-            tmp[m*m_tot+m] += fk[ik]*TB_Hk[ik_count][iatom][is][m];                                           
+            tmp(m,m) += fk[ik]*TB_Hk[ik_count][iatom][is][m];
         }//ik
 
-        MPI_Allreduce(&tmp[0], &this->impurity_level[ineq][is][0], m_tot*m_tot,
+        MPI_Allreduce(tmp.data(), this->impurity_level[ineq][is].data(), m_tot*m_tot,
                       MPI_DOUBLE_COMPLEX, MPI_SUM, MPI_COMM_WORLD);
  
         for(int m=0; m<m_tot; m++)
-          this->impurity_level[ineq][is][m*m_tot+m] -= dc_term[m*m_tot+m];
+          this->impurity_level[ineq][is](m, m) -= dc_term[m*m_tot+m];
 
         //=============================================
         //   Local symmetry operation
@@ -92,7 +94,7 @@ namespace DMFT
         const int local_symmetry = atom.local_sym();
         const int corr_L=atom.L(ineq);
         DFT_output::atoms_info::symmetry_operation_matrix<std::complex<double>>(
-              local_symmetry, corr_L, m_tot, &this->impurity_level[ineq][is][0]);
+              local_symmetry, corr_L, m_tot, this->impurity_level[ineq][is].data());
 
       }//is
     }//ineq
@@ -109,7 +111,7 @@ namespace DMFT
 
         for(int m=0; m<m_tot; m++)
           GLV::ofs_running << std::setw(12) << std::fixed << std::setprecision(6) << 
-            GLC::Hartree_to_eV*this->impurity_level[ineq][is][m*m_tot+m].real();
+            GLC::Hartree_to_eV*this->impurity_level[ineq][is](m, m).real();
 
         GLV::ofs_running << std::endl;
       }
@@ -161,7 +163,7 @@ namespace DMFT
           this->Green_fun_omega[ineq][is].resize(nomega);
           for(int iomega=0; iomega<nomega; iomega++)
           {
-            this->Green_fun_omega[ineq][is][iomega].resize(m_tot*m_tot,zero);
+            this->Green_fun_omega[ineq][is][iomega].setZero(m_tot, m_tot);
           }
         }
       }
@@ -180,10 +182,7 @@ namespace DMFT
           for(int iomega=0; iomega<nomega; iomega++)
           {
             auto& Gfc = Gfb[iomega];
-            for(int m_index=0; m_index<m_tot*m_tot; m_index++)
-            {
-              Gfc[m_index] = zero;
-            }//m_index
+            Gfc.setZero();
           }//iomge
         }//is
       }//ineq
@@ -191,9 +190,7 @@ namespace DMFT
     
     //evaluation
     for(int is=0; is<nspin; is++){
-      std::vector<std::vector<std::complex<double>>> lattice_Sigma(nomega);
-      for(int iomega=0; iomega<nomega; iomega++)
-        lattice_Sigma[iomega].resize(wbands[is]*wbands[is], zero);
+      std::vector<Matrix> lattice_Sigma;
 
       int ik_count=0;
       for(int ik=0; ik<nks; ik++)
@@ -206,53 +203,21 @@ namespace DMFT
               lattice_Sigma);
 
         const std::vector<double>& epsilon = space.eigen_val()[is][ik];    
-        std::vector<std::complex<double>> Gf_latt(wbands[is]*wbands[is]);
-        std::vector<int> ipiv(wbands[is],0);
-        
         for(int iomega=0; iomega<nomega; iomega++)
         {
-          for(int iband1=0; iband1<wbands[is]; iband1++)
-          {
-            for(int iband2=0; iband2<wbands[is]; iband2++)
-            {
-              int band_index = iband1*wbands[is]+iband2;
-
-              if(iband1==iband2)
-                  Gf_latt[band_index] = im*freq[iomega] + mu
-                        -epsilon[iband1] - lattice_Sigma[iomega][band_index];
-              else
-                  Gf_latt[band_index] = -lattice_Sigma[iomega][band_index];
-
-            }//iband2
-          }//iband1
-
-          general_complex_matrix_inverse(&Gf_latt[0], wbands[is], &ipiv[0]);
+          Matrix inverse_G_lat = -lattice_Sigma[iomega];
+          for(int iband=0; iband<wbands[is]; iband++)
+            inverse_G_lat(iband,iband) += im*freq[iomega] + mu - epsilon[iband];
+          const Matrix G_lat = inverse_G_lat.inverse();
 
           for(int ineq=0; ineq<ineq_num; ineq++)
           {
             const int iatom = atom.ineq_iatom(ineq);
             const int m_tot=norb_sub[iatom];
 
-            auto& Gf = this->Green_fun_omega[ineq][is];
-            const std::vector<std::complex<double>>& projector = proj.proj_access(ik_count)[iatom][is];
-
-            for(int m1=0; m1<m_tot; m1++)
-            {
-              for(int m2=0; m2<m_tot; m2++)
-              {
-                const int m_index = m1*m_tot+m2;
-                for(int iband1=0; iband1<wbands[is]; iband1++)
-                {
-                  int index1 = iband1*m_tot + m1;
-                  for(int iband2=0; iband2<wbands[is]; iband2++)
-                  {
-                    int index2 = iband2*m_tot + m2;
-                    Gf[iomega][m_index] += std::conj(projector[index1])*Gf_latt[iband1*wbands[is]+iband2]
-                                            *projector[index2]*fk[ik];
-                  }//iband2
-                }//iband1
-              }//m2
-            }//m1
+            Matrix& Gf = this->Green_fun_omega[ineq][is][iomega];
+            const Matrix& P = proj.proj_access(ik_count)[iatom][is];
+            Gf += fk[ik] * P.adjoint() * G_lat * P;
           }//ineq
         }//iomega      
         ik_count++;
@@ -269,9 +234,9 @@ namespace DMFT
       {
         for(int iomega=0; iomega<nomega; iomega++)
         {
-          std::vector<std::complex<double>> tmp = this->Green_fun_omega[ineq][is][iomega];
+          Matrix tmp = this->Green_fun_omega[ineq][is][iomega];
 
-          MPI_Allreduce( &tmp[0], &this->Green_fun_omega[ineq][is][iomega][0],
+          MPI_Allreduce( tmp.data(), this->Green_fun_omega[ineq][is][iomega].data(),
                         m_tot*m_tot, MPI_DOUBLE_COMPLEX, MPI_SUM, MPI_COMM_WORLD );                      
         }
       }
@@ -284,7 +249,7 @@ namespace DMFT
       for(int is=0; is<nspin; is++)
         for(int iomega=0; iomega<nomega; iomega++)
           DFT_output::atoms_info::symmetry_operation_matrix<std::complex<double>>(
-            local_symmetry, corr_L, m_tot, &this->Green_fun_omega[ineq][is][iomega][0] );
+            local_symmetry, corr_L, m_tot, this->Green_fun_omega[ineq][is][iomega].data() );
 
       /* //test
       if(mpi_rank()==0)
@@ -300,22 +265,22 @@ namespace DMFT
                   ofs_gf << std::setw(5) << iomega
                   << std::setw(2) << is << std::setw(3) << m1 << std::setw(3) << m2
                   << std::setw(15) << std::fixed << std::setprecision(9)
-                  << this->Green_fun_omega[ineq][0][iomega][m1*m_tot+m2].real()/GLC::Hartree_to_eV
+                  << this->Green_fun_omega[ineq][0][iomega](m1, m2).real()/GLC::Hartree_to_eV
                   << std::setw(15) << std::fixed << std::setprecision(9) 
-                  << this->Green_fun_omega[ineq][0][iomega][m1*m_tot+m2].imag()/GLC::Hartree_to_eV
+                  << this->Green_fun_omega[ineq][0][iomega](m1, m2).imag()/GLC::Hartree_to_eV
                   << std::setw(15) << std::fixed << std::setprecision(9) 
-                  << std::sqrt(std::pow(this->Green_fun_omega[ineq][0][iomega][m1*m_tot+m2].imag()/GLC::Hartree_to_eV,2) +
-                      std::pow(this->Green_fun_omega[ineq][0][iomega][m1*m_tot+m2].real()/GLC::Hartree_to_eV,2))<< '\n';
+                  << std::sqrt(std::pow(this->Green_fun_omega[ineq][0][iomega](m1, m2).imag()/GLC::Hartree_to_eV,2) +
+                      std::pow(this->Green_fun_omega[ineq][0][iomega](m1, m2).real()/GLC::Hartree_to_eV,2))<< '\n';
                 else
                   ofs_gf << std::setw(5) << iomega 
                   << std::setw(2) << is << std::setw(3) << m1 << std::setw(3) << m2
                   << std::setw(15) << std::fixed << std::setprecision(9)
-                  << this->Green_fun_omega[ineq][is][iomega][m1*m_tot+m2].real()/GLC::Hartree_to_eV
+                  << this->Green_fun_omega[ineq][is][iomega](m1, m2).real()/GLC::Hartree_to_eV
                   << std::setw(15) << std::fixed << std::setprecision(9) 
-                  << this->Green_fun_omega[ineq][is][iomega][m1*m_tot+m2].imag()/GLC::Hartree_to_eV 
+                  << this->Green_fun_omega[ineq][is][iomega](m1, m2).imag()/GLC::Hartree_to_eV
                   << std::setw(15) << std::fixed << std::setprecision(9) 
-                  << std::sqrt(std::pow(this->Green_fun_omega[ineq][is][iomega][m1*m_tot+m2].imag()/GLC::Hartree_to_eV,2) +
-                      std::pow(this->Green_fun_omega[ineq][is][iomega][m1*m_tot+m2].real()/GLC::Hartree_to_eV,2))<< '\n';  
+                  << std::sqrt(std::pow(this->Green_fun_omega[ineq][is][iomega](m1, m2).imag()/GLC::Hartree_to_eV,2) +
+                      std::pow(this->Green_fun_omega[ineq][is][iomega](m1, m2).real()/GLC::Hartree_to_eV,2))<< '\n';
           }
         }
         ofs_gf.close();
@@ -341,7 +306,7 @@ namespace DMFT
           this->hyb_omega[ineq][is].resize(nomega);
           for(int iomega=0; iomega<nomega; iomega++)
           {
-            this->hyb_omega[ineq][is][iomega].resize(m_tot*m_tot, zero);
+            this->hyb_omega[ineq][is][iomega].setZero(m_tot, m_tot);
           }
         }
       }
@@ -360,7 +325,7 @@ namespace DMFT
         {
           this->Weiss_omega[ineq][is].resize(nomega);
           for(int iomega=0; iomega<nomega; iomega++)
-            this->Weiss_omega[ineq][is][iomega].resize(m_tot*m_tot, zero);
+            this->Weiss_omega[ineq][is][iomega].setZero(m_tot, m_tot);
         }
       }
     }
@@ -371,13 +336,13 @@ namespace DMFT
       const int iatom = atom.ineq_iatom(ineq);
       const int m_tot=norb_sub[iatom];
 
-      std::vector<std::vector<std::vector<std::complex<double>>>>&
+      std::vector<std::vector<DFT_plus_DMFT::Matrix>>&
             hyb = this->hyb_omega[ineq];
 
-      std::vector<std::vector<std::vector<std::complex<double>>>>&
+      std::vector<std::vector<DFT_plus_DMFT::Matrix>>&
             G0 = this->Weiss_omega[ineq];
 
-      const std::vector<std::vector<std::vector<std::complex<double>>>>&
+      const std::vector<std::vector<DFT_plus_DMFT::Matrix>>&
             local_sigma = this->sigma.sigma_new(0)[ineq];
 
       for(int iomega=0; iomega<nomega; iomega++)
@@ -386,12 +351,12 @@ namespace DMFT
         {
           for(int m=0; m<m_tot; m++)
           {
-            G0[is][iomega][m*m_tot+m] = one/this->Green_fun_omega[ineq][is][iomega][m*m_tot+m] + local_sigma[is][iomega][m*m_tot+m];
+            G0[is][iomega](m, m) = one/this->Green_fun_omega[ineq][is][iomega](m, m) + local_sigma[is][iomega](m, m);
           
-            hyb[is][iomega][m*m_tot+m] = im*freq[iomega] + mu - this->impurity_level[ineq][is][m*m_tot+m] 
-                                      - G0[is][iomega][m*m_tot+m];
+            hyb[is][iomega](m, m) = im*freq[iomega] + mu - this->impurity_level[ineq][is](m, m)
+                                      - G0[is][iomega](m, m);
 
-            G0[is][iomega][m*m_tot+m] = one/G0[is][iomega][m*m_tot+m];                             
+            G0[is][iomega](m, m) = one/G0[is][iomega](m, m);
           }//m
         }//is
       }//iomega
@@ -407,9 +372,9 @@ namespace DMFT
             ofs_hyb << std::setw(5) << iomega << std::setw(2) << is
             << std::setw(3) << m1 << std::setw(3) << m2
             << std::setw(15) << std::fixed << std::setprecision(9) 
-            << hyb[is][iomega][m1*m_tot+m2].real()
+            << hyb[is][iomega](m1, m2).real()
             << std::setw(15) << std::fixed << std::setprecision(9) 
-            << hyb[is][iomega][m1*m_tot+m2].imag() << '\n';
+            << hyb[is][iomega](m1, m2).imag() << '\n';
         }
       }
       ofs_hyb.close();
@@ -435,10 +400,10 @@ namespace DMFT
     const std::complex<double> zero(0.0,0.0);
     const std::complex<double> im(0.0,1.0);
 
-    std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>&
+    std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>&
         hyb = this->hybdization_tau(impurity_solver);
     
-    // std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>> hyb;
+    // std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>> hyb;
 
     //Allocation and set zero
     if(hyb.empty())
@@ -454,7 +419,7 @@ namespace DMFT
         {
           hyb[ineq][is].resize(ntau+1);
           for(int itau=0; itau<ntau+1; itau++)
-            hyb[ineq][is][itau].resize(m_tot*m_tot,zero);
+            hyb[ineq][is][itau].setZero(m_tot, m_tot);
         }
       }
     }
@@ -472,9 +437,7 @@ namespace DMFT
           for(int itau=0; itau<ntau+1; itau++)
           {
             auto& hybc = hybb[itau];
-            for(int m_index=0; m_index<m_tot*m_tot; m_index++)
-              hybc[m_index] = zero;
-          }//itau
+            hybc.setZero();}//itau
         }//is
       }//ineq
     }
@@ -492,7 +455,7 @@ namespace DMFT
         {
           this->Weiss_tau[ineq][is].resize(ntau+1);
           for(int itau=0; itau<ntau+1; itau++)
-            this->Weiss_tau[ineq][is][itau].resize(m_tot*m_tot,zero);
+            this->Weiss_tau[ineq][is][itau].setZero(m_tot, m_tot);
         }
       }
     }
@@ -510,9 +473,7 @@ namespace DMFT
           for(int itau=0; itau<ntau+1; itau++)
           {
             auto& Weissc = Weissb[itau];
-            for(int m_index=0; m_index<m_tot*m_tot; m_index++)
-              Weissc[m_index] = zero;
-          }//itqu
+            Weissc.setZero();}//itqu
         }//is
       }//ineq
     }
@@ -539,25 +500,25 @@ namespace DMFT
         {
           //Hybridization function
           for(int iomega=0; iomega<nomega; iomega++)
-            hyb_omega_tmp[iomega] = this->hyb_omega[ineq][is][iomega][m*m_tot+m];
+            hyb_omega_tmp[iomega] = this->hyb_omega[ineq][is][iomega](m, m);
 
           Fourier_trans_omega_tau( beta, ntau+1, nomega,
             &this->sigma.sigma_imag.Matsubara_freq()[0],
             &tau[0], &hyb_omega_tmp[0], &hyb_tau_tmp[0]);
        
           for(int itau=0; itau<ntau+1; itau++)
-            hyb_tau1[is][itau][m*m_tot+m] = hyb_tau_tmp[itau];
+            hyb_tau1[is][itau](m, m) = hyb_tau_tmp[itau];
 
           //Weiss Green's function
           for(int iomega=0; iomega<nomega; iomega++)
-            hyb_omega_tmp[iomega] = this->Weiss_omega[ineq][is][iomega][m*m_tot+m];
+            hyb_omega_tmp[iomega] = this->Weiss_omega[ineq][is][iomega](m, m);
 
           Fourier_trans_omega_tau( beta, ntau+1, nomega,
             &this->sigma.sigma_imag.Matsubara_freq()[0],
             &tau[0], &hyb_omega_tmp[0], &hyb_tau_tmp[0]);
           
           for(int itau=0; itau<ntau+1; itau++)
-            this->Weiss_tau[ineq][is][itau][m*m_tot+m] = hyb_tau_tmp[itau];
+            this->Weiss_tau[ineq][is][itau](m, m) = hyb_tau_tmp[itau];
         }//m
       }//is
 //===========================================
@@ -575,16 +536,16 @@ namespace DMFT
 //       if(nspin==2)
 //       {
 //         ofs << std::setw(22) << std::fixed << std::setprecision(15) << 
-//         std::pow(GLC::Hartree_to_eV,2)*hyb[ineq][0][itau][m*m_tot+m].real()
+//         std::pow(GLC::Hartree_to_eV,2)*hyb[ineq][0][itau](m, m).real()
 //         << std::setw(22) << std::fixed << std::setprecision(15)
-//         << std::pow(GLC::Hartree_to_eV,2)*hyb[ineq][1][itau][m*m_tot+m].real();
+//         << std::pow(GLC::Hartree_to_eV,2)*hyb[ineq][1][itau](m, m).real();
 //       }
 //       else
 //       {
 //         ofs << std::setw(22) << std::fixed << std::setprecision(15) << 
-//         std::pow(GLC::Hartree_to_eV,2)*hyb[ineq][0][itau][m*m_tot+m].real()
+//         std::pow(GLC::Hartree_to_eV,2)*hyb[ineq][0][itau](m, m).real()
 //         << std::setw(22) << std::fixed << std::setprecision(15)
-//         << std::pow(GLC::Hartree_to_eV,2)*hyb[ineq][0][itau][m*m_tot+m].real();
+//         << std::pow(GLC::Hartree_to_eV,2)*hyb[ineq][0][itau](m, m).real();
 //       }
 //     }//m_index
 //     ofs << '\n';
@@ -681,7 +642,7 @@ namespace DMFT
     const std::complex<double> zero(0.0,0.0);
 
     //Self-energy allocation
-    std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>&
+    std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>&
         sigma_new = this->sigma.sigma_imag.sigma_new_access();
 
     if(sigma_new.empty())
@@ -698,13 +659,13 @@ namespace DMFT
           sigma_new[ineq][is].resize(nomega);
           for(int iomega=0; iomega<nomega; iomega++)
           {
-            sigma_new[ineq][is][iomega].resize(m_tot*m_tot,zero);
+            sigma_new[ineq][is][iomega].setZero(m_tot, m_tot);
           }//is
         }//i_omega
       }//ineq
     }
 
-    std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>&
+    std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>&
         sigma_save = this->sigma.sigma_imag.sigma_save_access();
 
     if(sigma_save.empty())
@@ -721,7 +682,7 @@ namespace DMFT
           sigma_save[ineq][is].resize(nomega);
           for(int iomega=0; iomega<nomega; iomega++)
           {
-            sigma_save[ineq][is][iomega].resize(m_tot*m_tot,zero);
+            sigma_save[ineq][is][iomega].setZero(m_tot, m_tot);
           }//is
         }//i_omega
       }//ineq
@@ -770,7 +731,7 @@ namespace DMFT
         for(int is=0; is<sigma_new[ineq].size(); is++)
           for(int iomega=0; iomega<sigma_new[ineq][is].size(); iomega++)
             for(int mindex=0; mindex<sigma_new[ineq][is][iomega].size(); mindex++)
-              sigma_save[ineq][is][iomega][mindex] = sigma_new[ineq][is][iomega][mindex];
+              sigma_save[ineq][is][iomega].data()[mindex] = sigma_new[ineq][is][iomega].data()[mindex];
     }
     
     /* test
@@ -795,16 +756,16 @@ namespace DMFT
                   ofs << std::left << std::setw(5) << iomega << std::setw(2) << is 
                       << std::setw(3) << m1 << std::setw(3) << m2
                       << std::setw(20) << std::fixed << std::setprecision(12) 
-                      << this->Green_fun_omega[ineq][0][iomega][m_index].real()/GLC::Hartree_to_eV << " "
+                      << this->Green_fun_omega[ineq][0][iomega].data()[m_index].real()/GLC::Hartree_to_eV << " "
                       << std::setw(20) << std::fixed << std::setprecision(12) 
-                      << this->Green_fun_omega[ineq][0][iomega][m_index].imag()/GLC::Hartree_to_eV << '\n';
+                      << this->Green_fun_omega[ineq][0][iomega].data()[m_index].imag()/GLC::Hartree_to_eV << '\n';
                 else
                   ofs << std::left << std::setw(5) << iomega << std::setw(2) << is 
                       << std::setw(3) << m1 << std::setw(3) << m2
                       << std::setw(20) << std::fixed << std::setprecision(12) 
-                      << this->Green_fun_omega[ineq][is][iomega][m_index].real()/GLC::Hartree_to_eV << " "
+                      << this->Green_fun_omega[ineq][is][iomega].data()[m_index].real()/GLC::Hartree_to_eV << " "
                       << std::setw(20) << std::fixed << std::setprecision(12) 
-                      << this->Green_fun_omega[ineq][is][iomega][m_index].imag()/GLC::Hartree_to_eV << '\n';
+                      << this->Green_fun_omega[ineq][is][iomega].data()[m_index].imag()/GLC::Hartree_to_eV << '\n';
             }
           }
         }//is
@@ -832,10 +793,10 @@ namespace DMFT
     const int nomega = *(int*)in.parameter("n_omega");
     const double sc_criteria = *(double*)in.parameter("delta_sigma");
 
-    std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>&
+    std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>&
         sigma_new = this->sigma.sigma_new(flag_axis);
 
-    std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>&
+    std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>&
         sigma_save = this->sigma.sigma_save(flag_axis);
 
     if(this->scf_delta.empty()) this->scf_delta.resize(ineq_num,1.0e-9);
@@ -855,8 +816,8 @@ namespace DMFT
         {
           for(int m=0; m<m_tot; m++)
           {
-            double tmp = std::sqrt(std::norm( sigma_new[ineq][is][iomega][m*m_tot+m] 
-                        - sigma_save[ineq][is][iomega][m*m_tot+m] ));
+            double tmp = std::sqrt(std::norm( sigma_new[ineq][is][iomega](m, m)
+                        - sigma_save[ineq][is][iomega](m, m) ));
             if(tmp>this->scf_delta[ineq]) this->scf_delta[ineq] = tmp;
           }//m_index
         }//iomega
@@ -893,10 +854,10 @@ namespace DMFT
       for(int is=0; is<sigma_new[ineq].size(); is++)
         for(int iomega=0; iomega<sigma_new[ineq][is].size(); iomega++)
           for(int mindex=0; mindex<sigma_new[ineq][is][iomega].size(); mindex++){
-            sigma_new[ineq][is][iomega][mindex] = 
-              alpha*sigma_new[ineq][is][iomega][mindex] + 
-              (1.0-alpha)*sigma_save[ineq][is][iomega][mindex];
-            sigma_save[ineq][is][iomega][mindex] = sigma_new[ineq][is][iomega][mindex];
+            sigma_new[ineq][is][iomega].data()[mindex] =
+              alpha*sigma_new[ineq][is][iomega].data()[mindex] +
+              (1.0-alpha)*sigma_save[ineq][is][iomega].data()[mindex];
+            sigma_save[ineq][is][iomega].data()[mindex] = sigma_new[ineq][is][iomega].data()[mindex];
           }
             
 
@@ -920,10 +881,10 @@ namespace DMFT
     const int nspin = band.nspins();
     const int nomega = *(int*)in.parameter("n_omega"); 
 
-    std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>&
+    std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>&
         sigma_new = this->sigma.sigma_imag.sigma_new_access();
     
-    std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>&
+    std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>&
         sigma_correlatd = this->sigma.sigma_imag.correlated_sigma_access();
 
     std::vector<double>& freq=this->sigma.sigma_imag.Matsubara_freq();
@@ -934,30 +895,16 @@ namespace DMFT
       const int iatom = atom.ineq_iatom(ineq);
       const int m_tot = norb_sub[iatom];
 
-      std::vector<std::vector<std::vector<std::complex<double>>>>
-          Gf_omega = this->Green_fun_omega[ineq];
-
-      std::vector<std::vector<std::vector<std::complex<double>>>>
-          Weiss = this->Weiss_omega[ineq];
-
-      std::vector<std::vector<std::vector<std::complex<double>>>>&
-          sigma_newa =sigma_new[ineq];
-
-      std::vector<int> ipiv(m_tot,0);
-
-      for(int iomega=0; iomega<nomega; iomega++)   
-      {          
+      for(int iomega=0; iomega<nomega; iomega++)
+      {
         for(int is=0; is<nspin; is++)
-        {         
-          general_complex_matrix_inverse(&Gf_omega[is][iomega][0], m_tot, &ipiv[0]);
-
-          general_complex_matrix_inverse(&Weiss[is][iomega][0], m_tot, &ipiv[0]);
-          
-          for(int m_index=0; m_index<m_tot*m_tot; m_index++)
-            sigma_newa[is][iomega][m_index] = Weiss[is][iomega][m_index] - Gf_omega[is][iomega][m_index];
-
+        {
+          const Matrix& G = this->Green_fun_omega[ineq][is][iomega];
+          const Matrix& G0 = this->Weiss_omega[ineq][is][iomega];
+          Matrix& Sigma = sigma_new[ineq][is][iomega];
+          Sigma = G0.inverse() - G.inverse();
         }//is
-      }//iomega   
+      }//iomega
     }//ineq
 
     return;
@@ -995,7 +942,7 @@ namespace DMFT
       freq[iomega] = (2*iomega+1)*GLC::PI/beta;
 
     //Allocation and set zero
-    std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>
+    std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>
           local_gf(ineq_num);
     for(int ineq=0; ineq<ineq_num; ineq++)
     {
@@ -1007,7 +954,7 @@ namespace DMFT
       {
         local_gf[ineq][is].resize(nomega);
         for(int iomega=0; iomega<nomega; iomega++)
-          local_gf[ineq][is][iomega].resize(m_tot*m_tot,zero);
+          local_gf[ineq][is][iomega].setZero(m_tot, m_tot);
       }
     }
 
@@ -1040,14 +987,14 @@ namespace DMFT
 
         for(int is=0; is<nspin; is++)
         {
-          const std::vector<std::complex<double>>& projector = proj.proj_access(ik_count)[iatom][is];
+          const Matrix& projector = proj.proj_access(ik_count)[iatom][is];
       
             for(int m=0; m<m_tot; m++)
               for(int iband=0; iband<wbands[is]; iband++)
                 local_occ_tmp[iatom][is][m] += 
-                  ( std::conj(projector[iband*m_tot + m])*
+                  ( std::conj(projector(iband, m))*
                     dft_occ_num[is][ik][ wb2ib[is][iband] ]*fk[ik]*
-                    projector[iband*m_tot + m] ).real();
+                    projector(iband, m) ).real();
         }//is
         ik_count++;
       }//ik
@@ -1124,14 +1071,14 @@ namespace DMFT
         for(int is=0; is<nspin; is++)
         {
           const std::vector<double>& epsilon = space.eigen_val()[is][ik];     
-          const std::vector<std::complex<double>>& projector = proj.proj_access(ik_count)[iatom][is];
+          const Matrix& projector = proj.proj_access(ik_count)[iatom][is];
       
             for(int m=0; m<m_tot; m++)
               for(int iband=0; iband<wbands[is]; iband++)
                 local_occ_tmp[iatom][is][m] += 
-                  ( std::conj(projector[iband*m_tot + m])/
+                  ( std::conj(projector(iband, m))/
                     (1.0+std::exp(beta*(epsilon[iband]-mu)))*
-                    projector[iband*m_tot + m]*fk[ik] ).real();
+                    projector(iband, m)*fk[ik] ).real();
         }//is
         ik_count++;
       }//ik
@@ -1209,14 +1156,14 @@ namespace DMFT
         {
           auto& Gf = local_gf[ineq][is];
           const std::vector<double>& epsilon = space.eigen_val()[is][ik];     
-          const std::vector<std::complex<double>>& projector = proj.proj_access(ik_count)[iatom][is];
+          const Matrix& projector = proj.proj_access(ik_count)[iatom][is];
       
           #pragma omp parallel for
           for(int iomega=0; iomega<nomega; iomega++)
             for(int m=0; m<m_tot; m++)
               for(int iband=0; iband<wbands[is]; iband++)
-                Gf[iomega][m*m_tot+m] += std::conj(projector[iband*m_tot + m])/
-                (im*freq[iomega] + mu - epsilon[iband])*projector[iband*m_tot + m]*fk[ik];
+                Gf[iomega](m, m) += std::conj(projector(iband, m))/
+                (im*freq[iomega] + mu - epsilon[iband])*projector(iband, m)*fk[ik];
         }//is
         ik_count++;
       }//ik
@@ -1228,7 +1175,7 @@ namespace DMFT
         {
           std::vector<std::complex<double>> tmp = local_gf[ineq][is][iomega];
 
-          MPI_Allreduce( &tmp[0], &local_gf[ineq][is][iomega][0], m_tot*m_tot, 
+          MPI_Allreduce( tmp.data(), &local_gf[ineq][is][iomega][0], m_tot*m_tot,
                          MPI_DOUBLE_COMPLEX, MPI_SUM, MPI_COMM_WORLD );
         }
       }
@@ -1309,7 +1256,7 @@ namespace DMFT
     return;
   }
 
-  std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>& 
+  std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>&
       impurity::hybdization_tau(const int impurity_solver)
   {
     switch(impurity_solver)
@@ -1398,7 +1345,7 @@ namespace DMFT
 //   {
 //     for(int m=0; m<m_tot; m++)
 //     {
-//       if(iomega<nomega) ofs_hwr << std::setw(15) << std::fixed << std::setprecision(9) << hyb_omega[ineq][is][iomega][m*m_tot+m].real();
+//       if(iomega<nomega) ofs_hwr << std::setw(15) << std::fixed << std::setprecision(9) << hyb_omega[ineq][is][iomega](m, m).real();
 //       else  ofs_hwr << std::setw(15) << std::fixed << std::setprecision(9) << -C2[is][m]/std::pow(omegan,2);
 //     }//m
 //   }//is
@@ -1415,7 +1362,7 @@ namespace DMFT
 //   {
 //     for(int m=0; m<m_tot; m++)
 //     {
-//       if(iomega<nomega) ofs_hwi << std::setw(15) << std::fixed << std::setprecision(9) << hyb_omega[ineq][is][iomega][m*m_tot+m].imag();
+//       if(iomega<nomega) ofs_hwi << std::setw(15) << std::fixed << std::setprecision(9) << hyb_omega[ineq][is][iomega](m, m).imag();
 //       else  ofs_hwi << std::setw(15) << std::fixed << std::setprecision(9) << -C1[is][m]/omegan;
 //     }//m
 //   }//is

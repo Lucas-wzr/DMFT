@@ -4,8 +4,10 @@
 #include "math_zone.h"
 #include "../constants.h"
 
-#define MKL_Complex16 std::complex<double>
-#include <mkl.h>
+#include "../matrix_types.h"
+#include <Eigen/Dense>
+
+using DFT_plus_DMFT::Matrix;
 
 #include <mpi.h>
 #include <fstream>
@@ -16,8 +18,8 @@
 
 void spectrum::eva_spectrum(
       const double mu,
-      DFT_output::KS_bands& band, 
-      DFT_output::atoms_info& atom, 
+      DFT_output::KS_bands& band,
+      DFT_output::atoms_info& atom,
       DFT_plus_DMFT::projector& proj,
       DMFT::self_energy& sigma,
       DMFT::input_info& in,
@@ -69,74 +71,45 @@ void spectrum::eva_spectrum(
 
   //===========evaluation===============
   for(int is=0; is<nspin; is++){
-    std::vector<std::vector<std::complex<double>>> lattice_Sigma(nomega);
-      for(int iomega=0; iomega<nomega; iomega++)
-        lattice_Sigma[iomega].resize(wbands[is]*wbands[is]);
+    std::vector<Matrix> lattice_Sigma;
 
     for(int ik=0; ik<k_map.size(); ik++)
     {
       const int i_k_point = k_map[ik];
 
       sigma.evalute_lattice_sigma(
-          1, mag, is, wbands, atom, 
-          proj.proj_access(ik), 
+          1, mag, is, wbands, atom,
+          proj.proj_access(ik),
           lattice_Sigma );
 
       const auto& epsilon=space.eigen_val()[is][i_k_point];
-      std::vector<std::vector<std::complex<double>>> KS_Gw(nomega);
+      std::vector<Matrix> KS_Gw(nomega);
       for(int iomega=0; iomega<nomega; iomega++)
-        KS_Gw[iomega].resize(wbands[is]*wbands[is]);
-  
-      int* ipiv = new int [wbands[is]];
-      for(int iomega=0; iomega<nomega; iomega++)
-      {        
-        for(int iband1=0; iband1<wbands[is]; iband1++)
-        {
-          for(int iband2=0; iband2<wbands[is]; iband2++)
-          {           
-            if(iband1==iband2)
-              KS_Gw[iomega][iband1*wbands[is]+iband2] = this->freq[iomega] + mu 
-                -epsilon[iband1]-lattice_Sigma[iomega][iband1*wbands[is]+iband2];
-            else
-              KS_Gw[iomega][iband1*wbands[is]+iband2] = 
-                -lattice_Sigma[iomega][iband1*wbands[is]+iband2];
-          }
-        }
-
-        general_complex_matrix_inverse(&KS_Gw[iomega][0], wbands[is], &ipiv[0]);
+      {
+        Matrix inverse_KS_Gw = -lattice_Sigma[iomega];
+        for(int iband=0; iband<wbands[is]; iband++)
+          inverse_KS_Gw(iband,iband) += this->freq[iomega] + mu - epsilon[iband];
+        KS_Gw[iomega] = inverse_KS_Gw.inverse();
 
         for(int iband=0; iband<wbands[is]; iband++)
-          this->Awk[is][iomega][i_k_point] -= KS_Gw[iomega][iband*wbands[is]+iband].imag()/GLC::PI;
+          this->Awk[is][iomega][i_k_point] -= KS_Gw[iomega](iband,iband).imag()/GLC::PI;
 
         for(int ineq=0; ineq<ineq_num; ineq++)
         {
           const int iatom = atom.ineq_iatom(ineq);
           const int m_tot = norb_sub[iatom];
 
-          const std::vector<std::complex<double>>& projector = proj.proj_access(ik)[iatom][is];
-
+          const Matrix& P = proj.proj_access(ik)[iatom][is];
+          const Matrix G_local = P.adjoint() * KS_Gw[iomega] * P;
           for(int m=0; m<m_tot; m++)
-          {
-            const int m_index = m*m_tot+m;
-            for(int iband1=0; iband1<wbands[is]; iband1++)
-            {
-              int index1 = iband1*m_tot + m;
-              for(int iband2=0; iband2<wbands[is]; iband2++)
-              {
-                int index2 = iband2*m_tot + m;
-                this->Aw_loc[ineq][is][iomega][m] -= 
-                    ( std::conj(projector[index1])*
-                    KS_Gw[iomega][iband1*wbands[is]+iband2]
-                    *projector[index2]*fk[i_k_point] ).imag()/GLC::PI;
-              }//iband2
-            }//iband1
-          }//m
+            this->Aw_loc[ineq][is][iomega][m] -=
+                G_local(m,m).imag() * fk[i_k_point] / GLC::PI;
         }//ineq
       }//iomega
-      delete [] ipiv;
+
     }//ik
   }//is
-  
+
   for(int is=0; is<nspin; is++)
   {
     for(int iomega=0; iomega<nomega; iomega++)
@@ -146,7 +119,7 @@ void spectrum::eva_spectrum(
                     MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD );
     }
   }
-  
+
   for(int is=0; is<nspin; is++)
     for(int iomega=0; iomega<nomega; iomega++)
       for(int ik=0; ik<nks; ik++)
@@ -164,12 +137,12 @@ void spectrum::eva_spectrum(
       for(int iomega=0; iomega<nomega; iomega++)
       {
         std::vector<double> array = this->Aw_loc[ineq][is][iomega];
-        
+
         MPI_Allreduce(&array[0], &this->Aw_loc[ineq][is][iomega][0],
                       m_tot, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD );
-        
+
         DFT_output::atoms_info::symmetry_operation_vector<double>(
-                      local_symmetry, corr_L, m_tot, 
+                      local_symmetry, corr_L, m_tot,
                       &this->Aw_loc[ineq][is][iomega][0] );
       }
     }
@@ -180,8 +153,8 @@ void spectrum::eva_spectrum(
 
 void spectrum::eva_spectrum_normalization(
       const double mu,
-      DFT_output::KS_bands& band, 
-      DFT_output::atoms_info& atom, 
+      DFT_output::KS_bands& band,
+      DFT_output::atoms_info& atom,
       DFT_plus_DMFT::projector& proj,
       DMFT::self_energy& sigma,
       DMFT::input_info& in,
@@ -255,32 +228,28 @@ void spectrum::eva_spectrum_normalization(
   //===========evaluation===============
   for(int is=0; is<nspin; is++)
   {
-    std::vector<std::vector<std::complex<double>>> lattice_Sigma(nomega);
-    for(int iomega=0; iomega<nomega; iomega++)
-      lattice_Sigma[iomega].resize(wbands[is]*wbands[is], zero);
+    std::vector<Matrix> lattice_Sigma;
 
     for(int ik=0; ik<k_map.size(); ik++)
     {
       const int i_k_point = k_map[ik];
 
       sigma.evalute_lattice_sigma(
-          1, mag, is, wbands, atom, 
-          proj.proj_access(ik), 
+          1, mag, is, wbands, atom,
+          proj.proj_access(ik),
           lattice_Sigma );
- 
+
       const auto& epsilon=space.eigen_val()[is][i_k_point];
       const auto& DOS_epsilon=space.DOS_eigen_val()[is][i_k_point];
 
-      std::vector<std::complex<double>> KS_Gw(DOS_wbands[is]*DOS_wbands[is]);
-      int* ipiv = new int [ DOS_wbands[is] ];
+      Matrix inverse_KS_Gw(DOS_wbands[is], DOS_wbands[is]);
       for(int iomega=0; iomega<nomega; iomega++)
       {
-        for(std::complex<double>& iter : KS_Gw)
-          iter = zero;
+        inverse_KS_Gw.setZero();
 
         //=====Uncorrelated subset======
         for(int iband=0; iband<DOS_wbands[is]; iband++)
-          KS_Gw[iband*DOS_wbands[is]+iband] = 
+          inverse_KS_Gw(iband,iband) =
               this->freq[iomega] + mu - DOS_epsilon[iband] + eta;
 
         //======Correlated subset======
@@ -288,29 +257,29 @@ void spectrum::eva_spectrum_normalization(
         {
           int iDOS_band1 = corr_DOS_bands[is][iband1];
           for(int iband2=0; iband2<wbands[is]; iband2++)
-          {       
-            int iDOS_band2 = corr_DOS_bands[is][iband2];    
+          {
+            int iDOS_band2 = corr_DOS_bands[is][iband2];
             if(iband1==iband2)
-              KS_Gw[iDOS_band1*DOS_wbands[is]+iDOS_band2] = this->freq[iomega] + mu 
-                -epsilon[iband1]-lattice_Sigma[iomega][iband1*wbands[is]+iband2];
+              inverse_KS_Gw(iDOS_band1,iDOS_band2) = this->freq[iomega] + mu
+                -epsilon[iband1]-lattice_Sigma[iomega](iband1,iband2);
             else
-              KS_Gw[iDOS_band1*DOS_wbands[is]+iDOS_band2] = 
-                -lattice_Sigma[iomega][iband1*wbands[is]+iband2];
+              inverse_KS_Gw(iDOS_band1,iDOS_band2) =
+                -lattice_Sigma[iomega](iband1,iband2);
           }
         }
-        general_complex_matrix_inverse(&KS_Gw[0], DOS_wbands[is], &ipiv[0]);
+        const Matrix KS_Gw = inverse_KS_Gw.inverse();
 
         for(int iband=0; iband<DOS_wbands[is]; iband++)
-          this->Aw_ik_iband[is][ik][iband][iomega] = -KS_Gw[iband*DOS_wbands[is]+iband].imag();
-          
+          this->Aw_ik_iband[is][ik][iband][iomega] = -KS_Gw(iband,iband).imag();
+
       }//iomega
-      delete [] ipiv;
+
 
       //Re-normalization
       double norm;
       for(int iband=0; iband<DOS_wbands[is]; iband++){
         Simpson_Integral(this->Aw_ik_iband[is][ik][iband].size(),
-                          &this->Aw_ik_iband[is][ik][iband][0], 
+                          &this->Aw_ik_iband[is][ik][iband][0],
                           dw, norm );
 
         for(int iomega=0; iomega<this->Aw_ik_iband[is][ik][iband].size(); iomega++)
@@ -326,20 +295,19 @@ void spectrum::eva_spectrum_normalization(
         {
           const int iatom = atom.ineq_iatom(ineq);
           const int m_tot = norb_sub[iatom];
-          const std::vector<std::complex<double>>& projector = proj.proj_access(ik)[iatom][is];
+          const Matrix& projector = proj.proj_access(ik)[iatom][is];
 
           for(int m=0; m<m_tot; m++)
           {
             const int m_index = m*m_tot+m;
             for(int iband=0; iband<wbands[is]; iband++)
             {
-              int index = iband*m_tot + m;
               int iDOS_band = corr_DOS_bands[is][iband];
 
-              this->Aw_loc[ineq][is][iomega][m] += 
-                  ( std::conj(projector[index])*
+              this->Aw_loc[ineq][is][iomega][m] +=
+                  ( std::conj(projector(iband, m))*
                   this->Aw_ik_iband[is][ik][iDOS_band][iomega]
-                  *projector[index]*fk[i_k_point] ).real();
+                  *projector(iband, m)*fk[i_k_point] ).real();
             }//iband
           }//m
         }//ineq
@@ -356,7 +324,7 @@ void spectrum::eva_spectrum_normalization(
                     MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD );
     }
   }
-  
+
   for(int is=0; is<nspin; is++)
     for(int iomega=0; iomega<nomega; iomega++)
       for(int ik=0; ik<nks; ik++)
@@ -374,12 +342,12 @@ void spectrum::eva_spectrum_normalization(
       for(int iomega=0; iomega<nomega; iomega++)
       {
         std::vector<double> array = this->Aw_loc[ineq][is][iomega];
-        
+
         MPI_Allreduce(&array[0], &this->Aw_loc[ineq][is][iomega][0],
                       m_tot, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD );
-        
+
         DFT_output::atoms_info::symmetry_operation_vector<double>(
-                      local_symmetry, corr_L, m_tot, 
+                      local_symmetry, corr_L, m_tot,
                       &this->Aw_loc[ineq][is][iomega][0] );
       }
     }
@@ -416,11 +384,11 @@ void spectrum::out_spectrum()
     for(int iomega=0; iomega<this->DOS[is].size(); iomega++)
     {
       double omega=this->freq[iomega]*GLC::Hartree_to_eV;
-      
+
       ofs << std::fixed << std::setprecision(6) << omega << " "
           << std::fixed << std::setprecision(6) << this->DOS[is][iomega] << std::endl ;
     }
-    
+
     ofs.close();
   }
 
@@ -435,7 +403,7 @@ void spectrum::out_spectrum()
       for(int iomega=0; iomega<this->Aw_loc[ineq][is].size(); iomega++)
       {
         double omega=this->freq[iomega]*GLC::Hartree_to_eV;
-        
+
         ofs << std::fixed << std::setprecision(6) << omega << " ";
         for(double iter : this->Aw_loc[ineq][is][iomega])
           ofs << std::fixed << std::setprecision(6) << iter << " ";

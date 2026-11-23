@@ -2,8 +2,7 @@
 #include "../debug.h"
 #include "../global_variables.h"
 
-#define MKL_Complex16 std::complex<double>
-#include <mkl.h>
+#include <Eigen/Dense>
 
 #include <fstream>
 #include <iostream>
@@ -16,8 +15,7 @@ namespace DFT_output
   bool KS_eigenvectors::read_eigenvec(
           const std::string dir,
           const int ik,
-          std::vector<std::vector<
-          std::complex<double>>>& eigenvector )
+          std::vector<DFT_plus_DMFT::Matrix>& eigenvector )
   {
     debug::codestamp("KS_eigenvectors::read_eigenvec");
 
@@ -53,12 +51,10 @@ namespace DFT_output
       ifs >> this->nbasis;
       ifs.ignore(150, '\n');
 
-      //eigenvector[ispin][nbasis*nbands];
-      if(eigenvector.empty()){
-        eigenvector.resize(this->nspins);
-        for(ispin=0; ispin<nspins; ispin++)
-          eigenvector[ispin].resize(this->nbasis*this->nbands);
-      }
+      // One nbasis x selected-band matrix per spin.
+      eigenvector.resize(this->nspins);
+      for(ispin=0; ispin<nspins; ispin++)
+        eigenvector[ispin].setZero(this->nbasis, this->nbands);
 
       while(ifs.good())
       {
@@ -70,7 +66,7 @@ namespace DFT_output
         ifs >> real;
         ifs >> imag;
 
-        eigenvector[ispin][ibasis*this->nbands+iband] = std::complex<double>(real,imag);
+        eigenvector[ispin](ibasis, iband) = std::complex<double>(real,imag);
 
         ifs.ignore(150, '\n'); 
 
@@ -85,7 +81,7 @@ namespace DFT_output
   bool KS_eigenvectors::read_corr_subset(
       const std::string dir, const int ik,
       DFT_plus_DMFT::Hilbert_space& space,
-      std::vector<std::vector<std::complex<double>>>& eigenvector)
+      std::vector<DFT_plus_DMFT::Matrix>& eigenvector)
   {
     debug::codestamp("KS_eigenvectors::read_corr_subset");
 
@@ -125,12 +121,10 @@ namespace DFT_output
       ifs >> this->nbasis;
       ifs.ignore(150, '\n');
 
-      //eigenvector[ispin][nbasis*nbands];
-      if(eigenvector.empty()){
-        eigenvector.resize(this->nspins);
-        for(ispin=0; ispin<nspins; ispin++)
-          eigenvector[ispin].resize(this->nbasis*wbands[ispin]);
-      }
+      // One nbasis x selected-band matrix per spin.
+      eigenvector.resize(this->nspins);
+      for(ispin=0; ispin<nspins; ispin++)
+        eigenvector[ispin].setZero(this->nbasis, wbands[ispin]);
 
       while(ifs.good())
       {
@@ -143,7 +137,7 @@ namespace DFT_output
         ifs >> imag;
 
         if(correction[ispin][iband])
-          eigenvector[ispin][ibasis*wbands[ispin]+index[ispin][iband]] = std::complex<double>(real,imag);
+          eigenvector[ispin](ibasis, index[ispin][iband]) = std::complex<double>(real,imag);
 
         ifs.ignore(150, '\n'); 
 
@@ -158,7 +152,7 @@ namespace DFT_output
   bool KS_eigenvectors::read_DMFT_occ_subset(
       const std::string dir, const int ik,
       DFT_plus_DMFT::Hilbert_space& space,
-      std::vector<std::vector<std::complex<double>>>& eigenvector)
+      std::vector<DFT_plus_DMFT::Matrix>& eigenvector)
   {
     debug::codestamp("KS_eigenvectors::read_DMFT_occ_subset");
 
@@ -199,12 +193,10 @@ namespace DFT_output
       ifs >> this->nbasis;
       ifs.ignore(150, '\n');
 
-      //eigenvector[ispin][nbasis*nbands];
-      if(eigenvector.empty()){
-        eigenvector.resize(this->nspins);
-        for(ispin=0; ispin<nspins; ispin++)
-          eigenvector[ispin].resize( this->nbasis*(wb2ib[ispin].back()+1) );
-      }
+      // One nbasis x selected-band matrix per spin.
+      eigenvector.resize(this->nspins);
+      for(ispin=0; ispin<nspins; ispin++)
+        eigenvector[ispin].setZero(this->nbasis, (wb2ib[ispin].back()+1));
 
       while(ifs.good())
       {
@@ -217,7 +209,7 @@ namespace DFT_output
         ifs >> imag;
 
         if( iband<(wb2ib[ispin].back()+1) )
-          eigenvector[ispin][ibasis*(wb2ib[ispin].back()+1)+iband] = std::complex<double>(real,imag);
+          eigenvector[ispin](ibasis, iband) = std::complex<double>(real,imag);
 
         ifs.ignore(150, '\n'); 
 
@@ -230,28 +222,12 @@ namespace DFT_output
   }
   
   void KS_eigenvectors::evalute_k_wave_c_mat(
-    std::complex<double>* wave_c_mat, const int is,
+    DFT_plus_DMFT::Matrix& wave_c_mat, const int is,
     const int iband1, const int iband2,
-    std::vector<std::vector<std::complex<double>>>& eigenvector )
+    const std::vector<DFT_plus_DMFT::Matrix>& eigenvector )
   {
-    // void cblas_zgemm (const CBLAS_LAYOUT Layout, const CBLAS_TRANSPOSE transa, const
-          // CBLAS_TRANSPOSE transb, const MKL_INT m, const MKL_INT n, const MKL_INT k, const void
-          // *alpha, const void *a, const MKL_INT lda, const void *b, const MKL_INT ldb, const void
-          // *beta, void *c, const MKL_INT ldc);
-    // debug::codestamp("KS_eigenvectors::evalute_k_wave_c_mat");
-
-    std::complex<double> alpha(1.0,0.0);
-    std::complex<double> beta(0.0,0.0);
-    
-    cblas_zgemm(CblasRowMajor, CblasNoTrans, CblasConjTrans,
-                this->nbasis, this->nbasis, 1, 
-                &alpha,
-                &eigenvector[is][iband1], 1,
-                &eigenvector[is][iband2], 1,
-                &beta,
-                wave_c_mat, this->nbasis);
-
-    return;
+    const auto& C = eigenvector[is];
+    wave_c_mat = C.col(iband1) * C.col(iband2).adjoint();
   }
 
 }

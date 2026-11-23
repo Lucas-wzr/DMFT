@@ -22,14 +22,16 @@
 
 extern "C" void iqist_narcissus_run_(); 
 
+using DFT_plus_DMFT::Matrix;
+
 namespace DMFT
 {
   void IQIST_NARCISSUS::output(
         const int char_step, const int DMFT_step, 
         const double mu, DMFT::input_info& in, DFT_output::atoms_info& atom, 
         DFT_output::KS_bands& band, const std::vector<double>& freq,
-        std::vector<std::vector<std::vector<std::complex<double>>>>& Eimp,
-        std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>& hyb_omega,
+        std::vector<std::vector<DFT_plus_DMFT::Matrix>>& Eimp,
+        std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>& hyb_omega,
         DMFT::coulomb_tensor& Umat )
   {
     //======================================================
@@ -87,19 +89,19 @@ namespace DMFT
       const int m_tot = norb_sub[iatom];
       const int corr_L = atom.L(iatom);
       
-      const std::vector<std::vector<std::complex<double>>>&
+      const std::vector<DFT_plus_DMFT::Matrix>&
             hoppinga = Eimp[ineq];
       
-      // const std::vector<std::vector<std::vector<std::complex<double>>>>&
+      // const std::vector<std::vector<DFT_plus_DMFT::Matrix>>&
       //       Sigma_ina = Sigma_in[ineq];
 
-      const std::vector<std::vector<std::vector<std::complex<double>>>>& 
+      const std::vector<std::vector<DFT_plus_DMFT::Matrix>>&
             hyb = hyb_omega[ineq];
       
-      // const std::vector<std::vector<std::vector<std::complex<double>>>>& 
+      // const std::vector<std::vector<DFT_plus_DMFT::Matrix>>&
       //       G0 = Weiss[ineq];
 
-      const std::vector<std::vector<std::vector<std::complex<double>>>>& 
+      const std::vector<std::vector<DFT_plus_DMFT::Matrix>>&
             hybt = this->hyb_tau[ineq];
 
       std::stringstream site_dir_ss;
@@ -127,10 +129,10 @@ namespace DMFT
       //===========================================
       //        write solver.eimp.in
       //===========================================
-      std::vector<std::vector<std::complex<double>>> muvec = hoppinga;
+      std::vector<DFT_plus_DMFT::Matrix> muvec = hoppinga;
       for(int is=0; is<nspin; is++)
         for(int m=0; m<m_tot; m++)
-          muvec[is][m*m_tot+m] = muvec[is][m*m_tot+m]-mu;
+          muvec[is](m, m) = muvec[is](m, m)-mu;
 
       this->write_solver_eimp_in(
         current_dir+"/solver.eimp.in", 
@@ -157,14 +159,14 @@ namespace DMFT
           {
             if(nspin==1)
               ofs_delta << std::setw(22) << std::fixed << std::setprecision(15) 
-              << GLC::Hartree_to_eV*hyb[0][iomega][m*m_tot+m].real() 
+              << GLC::Hartree_to_eV*hyb[0][iomega](m, m).real()
               << std::setw(22) << std::fixed << std::setprecision(15) 
-              << GLC::Hartree_to_eV*hyb[0][iomega][m*m_tot+m].imag();
+              << GLC::Hartree_to_eV*hyb[0][iomega](m, m).imag();
             else
               ofs_delta << std::setw(22) << std::fixed << std::setprecision(15) 
-              << GLC::Hartree_to_eV*hyb[is][iomega][m*m_tot+m].real() 
+              << GLC::Hartree_to_eV*hyb[is][iomega](m, m).real()
               << std::setw(22) << std::fixed << std::setprecision(15) 
-              << GLC::Hartree_to_eV*hyb[is][iomega][m*m_tot+m].imag();       
+              << GLC::Hartree_to_eV*hyb[is][iomega](m, m).imag();
           }//m
         }//is
         ofs_delta << '\n';
@@ -189,14 +191,14 @@ namespace DMFT
       //     {
       //       if(nspin==1)
       //         ofs_Sig << std::setw(22) << std::fixed << std::setprecision(15) 
-      //                 << Sigma_ina[0][iomega][m*m_tot+m].real()*GLC::Hartree_to_eV
+      //                 << Sigma_ina[0][iomega](m, m).real()*GLC::Hartree_to_eV
       //                 << std::setw(22) << std::fixed << std::setprecision(15) 
-      //                 << Sigma_ina[0][iomega][m*m_tot+m].imag()*GLC::Hartree_to_eV;
+      //                 << Sigma_ina[0][iomega](m, m).imag()*GLC::Hartree_to_eV;
       //       else
       //         ofs_Sig << std::setw(22) << std::fixed << std::setprecision(15) 
-      //                 << Sigma_ina[is][iomega][m*m_tot+m].real()*GLC::Hartree_to_eV
+      //                 << Sigma_ina[is][iomega](m, m).real()*GLC::Hartree_to_eV
       //                 << std::setw(22) << std::fixed << std::setprecision(15) 
-      //                 << Sigma_ina[is][iomega][m*m_tot+m].imag()*GLC::Hartree_to_eV ;      
+      //                 << Sigma_ina[is][iomega](m, m).imag()*GLC::Hartree_to_eV ;
       //     }//m
       //   }//is
       //   ofs_Sig << std::endl;
@@ -267,8 +269,7 @@ namespace DMFT
 
   void IQIST_NARCISSUS::write_solver_eimp_in(
         const std::string file, 
-        std::vector<std::vector<
-        std::complex<double>>>& muvec,
+        std::vector<DFT_plus_DMFT::Matrix>& muvec,
         const int nband, const int symm,
         const int corr_L, const int nspin )
   {
@@ -285,7 +286,7 @@ namespace DMFT
         if(nspin==1)
         {
           ofs << std::setw(22) << std::fixed << std::setprecision(15)
-              << (muvec[0][m*nband+m].real())*GLC::Hartree_to_eV;
+              << (muvec[0](m, m).real())*GLC::Hartree_to_eV;
           
           if(symm==1 && corr_L==2) //cubic symmetry, d orbital
           {
@@ -304,7 +305,7 @@ namespace DMFT
         else if(nspin==2)
         {
           ofs << std::setw(22) << std::fixed << std::setprecision(15)
-              << muvec[is][m*nband+m]*GLC::Hartree_to_eV;
+              << muvec[is](m, m)*GLC::Hartree_to_eV;
           
           if(symm==1 && corr_L==2) //cubic symmetry, d orbital
           {
@@ -359,9 +360,7 @@ namespace DMFT
         DFT_output::KS_bands& band,
         DMFT::input_info& in, 
         DFT_output::atoms_info& atom,
-        std::vector<std::vector<std::
-        vector<std::vector<
-        std::complex<double>>>>>& Sw)
+        std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>& Sw)
   {
     debug::codestamp("PACS_CTHYB::read_last_step");
 
@@ -396,10 +395,10 @@ namespace DMFT
       site_dir_ss << "/impurity" << ineq;
       std::string site_dir= site_dir_ss.str();
 
-      // std::vector<std::vector<std::vector<std::complex<double>>>>&
+      // std::vector<std::vector<DFT_plus_DMFT::Matrix>>&
       //       Sw_savea = Sw_save[ineq];
       
-      std::vector<std::vector<std::vector<std::complex<double>>>>&
+      std::vector<std::vector<DFT_plus_DMFT::Matrix>>&
             Swa = Sw[ineq];
 
       std::stringstream current_dir_ss;
@@ -527,7 +526,7 @@ namespace DMFT
 
       //   for(int is=0; is<nspin; is++)
       //     for(int m=0; m<m_tot; m++)
-      //       Sw_savea[is][count][m*m_tot+m] = 
+      //       Sw_savea[is][count](m, m) =
       //         std::complex<double>(Gw_real[is][m],Gw_im[is][m])/GLC::Hartree_to_eV;
 
       //   count++;
@@ -600,7 +599,7 @@ namespace DMFT
 
         for(int is=0; is<nspin; is++)
           for(int m=0; m<m_tot; m++)
-            Swa[is][count][m*m_tot+m] = 
+            Swa[is][count](m, m) =
             std::complex<double>(Gw_real[is][m],Gw_im[is][m])/GLC::Hartree_to_eV;
 
         count++;

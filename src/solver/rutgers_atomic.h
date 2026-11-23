@@ -1,6 +1,7 @@
 #pragma once
 
 #include "coulomb_tensor.h"
+#include "../matrix_types.h"
 #include <iosfwd>
 #include <vector>
 
@@ -11,10 +12,10 @@ namespace DMFT
     struct block
     {
       std::vector<int> states;
-      std::vector<double> energy;
-      std::vector<double> eigenvectors; // row-major: occupation state x eigenstate
+      Eigen::VectorXd energy;
+      DFT_plus_DMFT::RealMatrix eigenvectors; // row-major: occupation state x eigenstate
       std::vector<int> target;          // creation operator targets, zero-based; -1 = absent
-      std::vector<std::vector<double>> creation; // source eigenstate x target eigenstate
+      std::vector<DFT_plus_DMFT::RealMatrix> creation; // source eigenstate x target eigenstate
       int N;
       double Sz;
     };

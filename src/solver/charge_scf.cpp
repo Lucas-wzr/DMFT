@@ -10,7 +10,7 @@
 #include <fstream>
 #include <iomanip>
 
-#include <mkl.h>
+#include <Eigen/Dense>
 
 namespace DFT_plus_DMFT
 {
@@ -181,7 +181,7 @@ namespace DFT_plus_DMFT
     // DFT_output::overlap_matrix ovlp(this->flag_DFT_solver, "dft/outputs_to_DMFT/overlap_matrix");
     // const int n_basis = ovlp.ovlp_aims.nbasis();
     // std::vector<std::complex<double>> mat_tmp(n_basis*n_basis);
-    std::vector<std::vector<std::complex<double>>> eigenvector;
+    std::vector<Matrix> eigenvector;
 
     if(this->dens_mat_out.empty()){
       this->dens_mat_out.resize(task_nks);
@@ -265,7 +265,7 @@ namespace DFT_plus_DMFT
       }
     }
 
-    std::vector<std::vector<std::complex<double>>> eigenvector;
+    std::vector<Matrix> eigenvector;
     for(int ik=0; ik<task_nks; ik++){
       this->eva_DFT_k_densmat(
           this->flag_DFT_solver, ik, 
@@ -305,14 +305,10 @@ namespace DFT_plus_DMFT
         const int ik,
         const int i_k_point,
         DFT_plus_DMFT::Hilbert_space& space,
-        std::vector<std::vector<
-        std::complex<double>>>& eigenvector,
-        std::vector<std::vector<
-        std::complex<double>>>& dense_cmplx )
+        std::vector<DFT_plus_DMFT::Matrix>& eigenvector,
+        std::vector<Matrix>& dense_cmplx )
   {
     debug::codestamp("Charge_SCF::eva_DFT_DMFT_k_densmat");
-
-    const std::complex<double> zero(0.0,0.0);
 
     wave_function wfc;
 
@@ -330,33 +326,18 @@ namespace DFT_plus_DMFT
             std::exit(EXIT_FAILURE);
           }
           else if(std::fabs(this->fik_DMFT[ispin][ik][iband]) < 1.0e-6){
-             eigenvector[ispin][ibasis*this->fik_DMFT[ispin][ik].size()+iband] *= 0.0;
+             eigenvector[ispin](ibasis, iband) *= 0.0;
           }
           else{
-            eigenvector[ispin][ibasis*this->fik_DMFT[ispin][ik].size()+iband] *= std::sqrt(this->fik_DMFT[ispin][ik][iband]);
+            eigenvector[ispin](ibasis, iband) *= std::sqrt(this->fik_DMFT[ispin][ik][iband]);
           }
         }
   
-    // void cblas_zherk (const CBLAS_LAYOUT Layout, const CBLAS_UPLO uplo, const
-    //    CBLAS_TRANSPOSE trans, const MKL_INT n, const MKL_INT k, const double alpha, const void
-    //    *a, const MKL_INT lda, const double beta, void *c, const MKL_INT ldc);
-
-    for(int ispin=0; ispin<this->nspin; ispin++){
-      if(dense_cmplx[ispin].empty())
-        dense_cmplx[ispin].resize(nbasis*nbasis, zero);
-      else{
-        for(auto& iter : dense_cmplx[ispin])
-          iter = zero;
-      }
-    
-      cblas_zherk(CblasRowMajor, CblasUpper, CblasNoTrans, 
-                  nbasis, this->fik_DMFT[ispin][ik].size(), 
-                  1.0, &eigenvector[ispin][0], this->fik_DMFT[ispin][ik].size(), 
-                  0.0, &dense_cmplx[ispin][0], nbasis );
-
-      for(int ibasis1=0; ibasis1<nbasis; ibasis1++)
-        for(int ibasis2=0; ibasis2<ibasis1; ibasis2++)
-          dense_cmplx[ispin][ibasis1*nbasis + ibasis2] = std::conj(dense_cmplx[ispin][ibasis2*nbasis + ibasis1]);
+    for(int ispin=0; ispin<this->nspin; ispin++)
+    {
+      Matrix& D = dense_cmplx[ispin];
+      const Matrix& C = eigenvector[ispin];
+      D = C * C.adjoint();
     }
 
     return;
@@ -368,14 +349,10 @@ namespace DFT_plus_DMFT
         const int i_k_point,
         const std::vector<std::vector<
         std::vector<double>>>& fik,
-        std::vector<std::vector<
-        std::complex<double>>>& eigenvector,
-        std::vector<std::vector<
-        std::complex<double>>>& dense_cmplx )
+        std::vector<DFT_plus_DMFT::Matrix>& eigenvector,
+        std::vector<Matrix>& dense_cmplx )
   {
     debug::codestamp("Charge_SCF::eva_DFT_k_densmat");
-
-    const std::complex<double> zero(0.0,0.0);
 
     wave_function wfc;
 
@@ -384,7 +361,6 @@ namespace DFT_plus_DMFT
         i_k_point, eigenvector );       //read KS-eigenvector
 
     const int nbasis = wfc.basis_n();
-    const int nbands = wfc.nband();
 
     for(int ispin=0; ispin<this->nspin; ispin++)
       for(int iband=0; iband<fik[ispin][ik].size(); iband++)
@@ -394,33 +370,18 @@ namespace DFT_plus_DMFT
             std::exit(EXIT_FAILURE);
           }
           else if(std::fabs(fik[ispin][ik][iband]) < 1.0e-6){
-             eigenvector[ispin][ibasis*nbands+iband] *= 0.0;
+             eigenvector[ispin](ibasis, iband) *= 0.0;
           }
           else{
-            eigenvector[ispin][ibasis*nbands+iband] *= std::sqrt(fik[ispin][ik][iband]);
+            eigenvector[ispin](ibasis, iband) *= std::sqrt(fik[ispin][ik][iband]);
           }
         }
   
-    // void cblas_zherk (const CBLAS_LAYOUT Layout, const CBLAS_UPLO uplo, const
-    //    CBLAS_TRANSPOSE trans, const MKL_INT n, const MKL_INT k, const double alpha, const void
-    //    *a, const MKL_INT lda, const double beta, void *c, const MKL_INT ldc);
-
-    for(int ispin=0; ispin<this->nspin; ispin++){
-      if(dense_cmplx[ispin].empty())
-        dense_cmplx[ispin].resize(nbasis*nbasis, zero);
-      else{
-        for(auto& iter : dense_cmplx[ispin])
-          iter = zero;
-      }
-    
-      cblas_zherk(CblasRowMajor, CblasUpper, CblasNoTrans, 
-                  nbasis, nbands, 
-                  1.0, &eigenvector[ispin][0], nbands, 
-                  0.0, &dense_cmplx[ispin][0], nbasis );
-
-      for(int ibasis1=0; ibasis1<nbasis; ibasis1++)
-        for(int ibasis2=0; ibasis2<ibasis1; ibasis2++)
-          dense_cmplx[ispin][ibasis1*nbasis + ibasis2] = std::conj(dense_cmplx[ispin][ibasis2*nbasis + ibasis1]);
+    for(int ispin=0; ispin<this->nspin; ispin++)
+    {
+      Matrix& D = dense_cmplx[ispin];
+      const Matrix& C = eigenvector[ispin];
+      D = C * C.adjoint();
     }
 
     return;
@@ -532,7 +493,7 @@ namespace DFT_plus_DMFT
   }
 
   void Charge_SCF::mixing_density_matrix(
-      const int mix_step, 
+      const int mix_step,
       const std::vector<double>& alpha)
   {
     debug::codestamp("Charge_SCF::mixing_density_matrix");
@@ -541,13 +502,12 @@ namespace DFT_plus_DMFT
     if(mix_step==1){//Plain mixing
       // std::vector<std::vector<std::vector<std::complex<double>>>> dens_mat_tmp;
       // std::swap(dens_mat_tmp, this->dens_mat_out);
-      
+
       //Residual DM_mat
       for(int ik=0; ik<this->Opt_DM_mat.back().size(); ik++)
         for(int is=0; is<this->Opt_DM_mat.back()[ik].size(); is++)
-          for(int i=0; i<this->Opt_DM_mat.back()[ik][is].size(); i++)
-            this->dens_mat_out[ik][is][i] -= this->Opt_DM_mat.back()[ik][is][i];
-      
+          this->dens_mat_out[ik][is] -= this->Opt_DM_mat.back()[ik][is];
+
       if(this->Res_DM_mat.empty()) this->Res_DM_mat.push_back(this->dens_mat_out);
       else{
         this->Res_DM_mat.clear();
@@ -557,11 +517,10 @@ namespace DFT_plus_DMFT
       //Density matrix mixing
       for(int ik=0; ik<this->Opt_DM_mat.back().size(); ik++)
         for(int is=0; is<this->Opt_DM_mat.back()[ik].size(); is++)
-          for(int i=0; i<this->Opt_DM_mat.back()[ik][is].size(); i++)
-            this->dens_mat_out[ik][is][i] = 
-              (1.0-this->mixing_param)*this->Opt_DM_mat.back()[ik][is][i] +
-              this->mixing_param*( this->Res_DM_mat.back()[ik][is][i] + 
-              this->Opt_DM_mat.back()[ik][is][i] );
+          this->dens_mat_out[ik][is] =
+            (1.0-this->mixing_param)*this->Opt_DM_mat.back()[ik][is] +
+            this->mixing_param*( this->Res_DM_mat.back()[ik][is] +
+            this->Opt_DM_mat.back()[ik][is] );
 
       this->Opt_DM_mat.push_back(this->dens_mat_out);
     }
@@ -574,11 +533,10 @@ namespace DFT_plus_DMFT
       //Residual DM_mat
       for(int ik=0; ik<this->Opt_DM_mat.back().size(); ik++)
         for(int is=0; is<this->Opt_DM_mat.back()[ik].size(); is++)
-          for(int i=0; i<this->Opt_DM_mat.back()[ik][is].size(); i++)
-            this->dens_mat_out[ik][is][i] -= this->Opt_DM_mat.back()[ik][is][i];
-      
+          this->dens_mat_out[ik][is] -= this->Opt_DM_mat.back()[ik][is];
+
       //this->Res_DM_mat.size()<=this->max_mixing_step
-      if(this->Res_DM_mat.size()<this->max_mixing_step) 
+      if(this->Res_DM_mat.size()<this->max_mixing_step)
         this->Res_DM_mat.push_back(this->dens_mat_out);
       else{
         this->Res_DM_mat.pop_front();
@@ -588,35 +546,31 @@ namespace DFT_plus_DMFT
       //Mixing charge density matrix
       //First part: \rho^{opt}
       for(int ik=0; ik<this->Opt_DM_mat.back().size(); ik++)
-          for(int is=0; is<this->Opt_DM_mat.back()[ik].size(); is++)
-            for(int i=0; i<this->Opt_DM_mat.back()[ik][is].size(); i++)
-              this->dens_mat_out[ik][is][i] = this->Opt_DM_mat.back()[ik][is][i];
+        for(int is=0; is<this->Opt_DM_mat.back()[ik].size(); is++)
+          this->dens_mat_out[ik][is] = this->Opt_DM_mat.back()[ik][is];
 
       for(int istep=0; istep<alpha.size(); istep++)
         for(int ik=0; ik<this->Opt_DM_mat[istep].size(); ik++)
           for(int is=0; is<this->Opt_DM_mat[istep][ik].size(); is++)
-            for(int i=0; i<this->Opt_DM_mat[istep][ik][is].size(); i++)
-              this->dens_mat_out[ik][is][i] += alpha[istep]*
-                ( this->Opt_DM_mat[istep+1][ik][is][i] - 
-                  this->Opt_DM_mat[istep][ik][is][i] );
+            this->dens_mat_out[ik][is] += alpha[istep]*
+                ( this->Opt_DM_mat[istep+1][ik][is] -
+                  this->Opt_DM_mat[istep][ik][is] );
 
       //Second part: \Rrho^{opt}
       for(int ik=0; ik<this->Res_DM_mat.back().size(); ik++)
-          for(int is=0; is<this->Res_DM_mat.back()[ik].size(); is++)
-            for(int i=0; i<this->Res_DM_mat.back()[ik][is].size(); i++)
-              this->dens_mat_out[ik][is][i] += this->mixing_param*
-                  this->Res_DM_mat.back()[ik][is][i];
+        for(int is=0; is<this->Res_DM_mat.back()[ik].size(); is++)
+          this->dens_mat_out[ik][is] += this->mixing_param*
+              this->Res_DM_mat.back()[ik][is];
 
       for(int istep=0; istep<alpha.size(); istep++){
         for(int ik=0; ik<this->Res_DM_mat[istep].size(); ik++)
           for(int is=0; is<this->Res_DM_mat[istep][ik].size(); is++)
-            for(int i=0; i<this->Res_DM_mat[istep][ik][is].size(); i++)
-              this->dens_mat_out[ik][is][i] += this->mixing_param*alpha[istep]*
-                ( this->Res_DM_mat[istep+1][ik][is][i] - 
-                  this->Res_DM_mat[istep][ik][is][i] );
+            this->dens_mat_out[ik][is] += this->mixing_param*alpha[istep]*
+                ( this->Res_DM_mat[istep+1][ik][is] -
+                  this->Res_DM_mat[istep][ik][is] );
       }
 
-      if(this->Opt_DM_mat.size()<this->max_mixing_step) 
+      if(this->Opt_DM_mat.size()<this->max_mixing_step)
         this->Opt_DM_mat.push_back(this->dens_mat_out);
       else{
         this->Opt_DM_mat.pop_front();

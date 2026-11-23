@@ -134,12 +134,10 @@ namespace DFT_output
       const int norb = atom.norb();
       const std::complex<double> zero(0.0,0.0);
 
-std::vector<std::complex<double>> Sk(this->nbasis*this->nbasis, zero);
 
-      if(this->ovlp_matrix_k.empty()) this->ovlp_matrix_k.resize(this->nbasis*norb);
-      if(this->ovlp_localorb_k.empty()) this->ovlp_localorb_k.resize(norb*norb);
+      this->ovlp_matrix_k.setZero(this->nbasis, norb);
+      this->ovlp_localorb_k.resize(norb, norb);
 
-      for(std::complex<double>& iter : this->ovlp_matrix_k) iter = zero;
 
       for(int icell=0; icell<this->ncells; icell++)
       {
@@ -152,7 +150,7 @@ std::vector<std::complex<double>> Sk(this->nbasis*this->nbasis, zero);
         {
           int ibasis_row = atom.iorb2ibasis(iorb);
           for(int index=this->row_indptr[icell][ibasis_row]; index<this->row_indptr[icell][ibasis_row+1]; index++)
-            this->ovlp_matrix_k[ this->col_indices[icell][index]*norb + iorb] 
+            this->ovlp_matrix_k(this->col_indices[icell][index], iorb)
               += kphase*this->ovlp_csr[icell][index];
         }
 
@@ -177,8 +175,8 @@ std::vector<std::complex<double>> Sk(this->nbasis*this->nbasis, zero);
 
       for(int iorb1=0; iorb1<norb; iorb1++)
         for(int iorb2=0; iorb2<norb; iorb2++)
-          this->ovlp_localorb_k[iorb1*norb+iorb2] = 
-            this->ovlp_matrix_k[ atom.iorb2ibasis(iorb1)*norb + iorb2 ];
+          this->ovlp_localorb_k(iorb1, iorb2) =
+            this->ovlp_matrix_k(atom.iorb2ibasis(iorb1), iorb2);
 
       return;
     }

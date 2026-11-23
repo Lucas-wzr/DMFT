@@ -10,6 +10,8 @@
 #include <cstdlib>
 #include <sstream>
 
+using DFT_plus_DMFT::Matrix;
+
 namespace DMFT
 {
   void self_energy_real_aixs::read_AC_sigma(
@@ -44,7 +46,7 @@ namespace DMFT
           this->local_sigma_new[ineq][is].resize(this->n_omega);
           for(int iomega=0; iomega<this->n_omega; iomega++)
           {
-            this->local_sigma_new[ineq][is][iomega].resize(m_tot*m_tot,zeroc);
+            this->local_sigma_new[ineq][is][iomega].setZero(m_tot, m_tot);
           }//is
         }//i_omega
       }//ineq
@@ -119,7 +121,7 @@ namespace DMFT
 
         for(int is=0; is<nspin; is++)
           for(int m=0; m<m_tot; m++)
-            this->local_sigma_new[ineq][is][count][m*m_tot+m] = 
+            this->local_sigma_new[ineq][is][count](m, m) =
               std::complex<double>(Gw_real[is][m], Gw_im[is][m])/GLC::Hartree_to_eV;
 
         count++;

@@ -1,4 +1,5 @@
 #pragma once
+#include "../matrix_types.h"
 
 #include "../para/correlated_atoms.h"
 #include "projector.h"
@@ -25,13 +26,13 @@ namespace DMFT
     //===============================================
     //       interface
     //===============================================
-    inline std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>& 
+    inline std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>&
             sigma_new_access(){return local_sigma_new;}
 
-    inline std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>& 
+    inline std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>&
             sigma_save_access(){return local_sigma_save;}
 
-    inline std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>>& 
+    inline std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>&
             correlated_sigma_access(){return correlated_sigma_omega_n;}
 
     std::vector<double>& Matsubara_freq(){return imag_frequency;}
@@ -47,16 +48,16 @@ namespace DMFT
     std::vector<double> imag_frequency;
 
     //the local self energy of current DMFT step which is calculated by Dyson equation
-    //local_sigma_new[ineq][ispin][omega_n][m_index]
-    std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>> local_sigma_new;
+    //local_sigma_new[ineq][ispin][omega_n].data()[m_index]
+    std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>> local_sigma_new;
 
     //the local self energy of last DMFT step which is read from file
-    //local_sigma_save[ineq][ispin][omega_n][m_index]
-    std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>> local_sigma_save;
+    //local_sigma_save[ineq][ispin][omega_n].data()[m_index]
+    std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>> local_sigma_save;
 
     //the self energy where double counting term is subtracted
-    //correlated_sigma_omega_n[ineq][ispin][omega_n][m_index]
-    std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>> correlated_sigma_omega_n;
+    //correlated_sigma_omega_n[ineq][ispin][omega_n].data()[m_index]
+    std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>> correlated_sigma_omega_n;
 
     std::map<int, bool> self_energy_convergence;    //whether self-energy converged
 
