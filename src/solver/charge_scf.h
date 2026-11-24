@@ -11,6 +11,7 @@
 #include "chemical_potential.h"
 #include "../matrix_types.h"
 
+#include <string>
 #include <vector>
 #include <complex>
 #include <string>
@@ -34,7 +35,7 @@ namespace DFT_plus_DMFT
     #endif
 
     public:
-    void init(const int DFT_solver,
+    void init(const std::string& DFT_solver,
         const double mixing_parameter,
         const int mixing_step,
         const double delta_rho,
@@ -65,7 +66,7 @@ namespace DFT_plus_DMFT
         DFT_plus_DMFT::Hilbert_space& space );
 
     void eva_DFT_DMFT_k_densmat(
-        const int dft_solver,
+        const std::string& dft_solver,
         const int ik,
         const int i_k_point,
         DFT_plus_DMFT::Hilbert_space& space,
@@ -73,7 +74,7 @@ namespace DFT_plus_DMFT
         std::vector<Matrix>& dense_cmplx );
 
     void eva_DFT_k_densmat(
-        const int dft_solver,
+        const std::string& dft_solver,
         const int ik,
         const int i_k_point,
         const std::vector<std::vector<
@@ -102,7 +103,7 @@ namespace DFT_plus_DMFT
     void prepare_nscf_dft();
 
     private:
-    int flag_DFT_solver;
+    std::string dft_solver;
     double sc_delta_rho;
     double mixing_param;
     int max_mixing_step;

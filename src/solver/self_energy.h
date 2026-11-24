@@ -8,6 +8,7 @@
 #include "projector.h"
 
 #include <vector>
+#include <string>
 
 #include <complex>
 
@@ -23,7 +24,7 @@ namespace DMFT
     self_energy_imaginary_aixs sigma_imag;
     double_counting dc;
 
-    bool read_sigma_save(const int impurity_solver, const bool SOC,
+    bool read_sigma_save(const std::string& impurity_solver, const bool SOC,
                          const int nspin, DFT_output::atoms_info& atom);
 
     void initial_guess(const int axis_flag, const bool SOC,
@@ -32,14 +33,14 @@ namespace DMFT
     void subtract_double_counting(const int axis_flag);  //0: imaginary axis, 1:real axis
 
     void evalute_lattice_sigma(
-        const int axis_flag, const int mag,
+        const int axis_flag, const std::string& mag,
         const int ispin, const std::vector<int>& wbands,
         DFT_output::atoms_info& atom,
         const std::vector<std::vector<DFT_plus_DMFT::Matrix>>& projector,
         std::vector<DFT_plus_DMFT::Matrix>& Sigma);
 
     void evalute_lattice_sigma_infty(
-        const int axis_flag, const int mag,
+        const int axis_flag, const std::string& mag,
         const int ispin, const std::vector<int>& wbands,
         DFT_output::atoms_info& atom,
         const std::vector<std::vector<DFT_plus_DMFT::Matrix>>& projector,

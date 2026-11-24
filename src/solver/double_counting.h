@@ -4,6 +4,7 @@
 #include "../para/input.h"
 
 #include <complex>
+#include <string>
 #include <vector>
 
 namespace DMFT
@@ -14,7 +15,7 @@ namespace DMFT
     double_counting(){};
     ~double_counting(){};
 
-    void cal_double_counting(const int type, 
+    void cal_double_counting(const std::string& type,
             const bool SOC, const int nspin, 
             DFT_output::atoms_info& atom,
             DMFT::input_info& in,

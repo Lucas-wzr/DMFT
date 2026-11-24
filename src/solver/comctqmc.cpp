@@ -110,10 +110,10 @@ namespace DMFT
         const std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>& hyb,
         coulomb_tensor& Umat)
     {
-        executable=*(const std::string*)in.parameter("comctqmc_exe");
-        evalsim=*(const std::string*)in.parameter("comctqmc_evalsim");
-        launcher=*(const std::string*)in.parameter("comctqmc_launcher");
-        nproc=*(int*)in.parameter("comctqmc_nproc");
+        executable=in.get().comctqmc_exe;
+        evalsim=in.get().comctqmc_evalsim;
+        launcher=in.get().comctqmc_launcher;
+        nproc=in.get().comctqmc_nproc;
         const int nspin=band.nspins();
         if(band.soc() || (nspin!=1 && nspin!=2))
             throw std::runtime_error("ComCTQMC input currently requires collinear spins without SOC");
@@ -138,9 +138,9 @@ namespace DMFT
             const std::string impurity=paths.back()+"/impurity"+std::to_string(q);
             if(mkdir(impurity.c_str(),0755)!=0 && errno!=EEXIST) throw std::runtime_error("Cannot create "+impurity);
             if(mkdir(directory.c_str(),0755)!=0 && errno!=EEXIST) throw std::runtime_error("Cannot create "+directory);
-            write_input(directory,*(double*)in.parameter("beta"),mu,levels,delta,
-                Umat.Coulomb_matrix()[q],*(long long*)in.parameter("warmup"),
-                *(long long*)in.parameter("mc_step"));
+            write_input(directory,in.get().beta,mu,levels,delta,
+                Umat.Coulomb_matrix()[q],in.get().warmup,
+                in.get().mc_step);
         }
     }
 
@@ -225,9 +225,9 @@ namespace DMFT
         std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>& S)
     {
         try {
-            const int nspin=band.nspins(),N=*(int*)in.parameter("n_omega");
-            const int magnetism=*(int*)in.parameter("magnetism");
-            const double beta=*(double*)in.parameter("beta");
+            const int nspin=band.nspins(),N=in.get().n_omega;
+            const std::string& magnetism=in.get().magnetism;
+            const double beta=in.get().beta;
             if(band.soc() || (nspin!=1 && nspin!=2))
                 throw std::runtime_error("ComCTQMC results require collinear spins without SOC");
             for(int q=0;q<atom.inequ_atoms();q++)
@@ -240,7 +240,7 @@ namespace DMFT
                     std::vector<std::complex<double>> sd(M);
                     for(int m=0;m<M;m++)
                     {
-                        if(nspin==1 || magnetism==3 || magnetism==4)
+                        if(nspin==1 || magnetism=="para" || magnetism=="none")
                         {
                             sd[m]=(s[m][n]+s[M+m][n])/2.0;
                         }

@@ -12,9 +12,8 @@ namespace DFT_output
     atoms_info(){;}
     ~atoms_info(){;}
 
-    void read(DMFT::input_info& in);
+    void read(const DMFT::input_info& in);
     bool read_structure_symmetry();
-    bool read_local_symmetry(DMFT::input_info& in);
     bool read_correlated_atoms_info();
 
     void out();       //test whether reading worked corrected
@@ -69,7 +68,7 @@ namespace DFT_output
     std::vector<double> Hund_J;             //Parameter Hund J; unit:Hartree
     std::vector<int> mag_moment;            //the direction of magnetic moment
 
-    // local orbital symmetry; 
+    // Local orbital symmetry copied from in.get().local_symmetry when reading atoms.
     // 0:no symmetry and no rotation
     // 1:cubic symmetry
     // 2:t2g only

@@ -29,7 +29,7 @@ namespace DFT_plus_DMFT
 #endif
 
   void Charge_SCF::init(
-      const int DFT_solver,
+      const std::string& DFT_solver,
       const double mixing_parameter,
       const int mixing_step,
       const double delta_rho,
@@ -37,7 +37,7 @@ namespace DFT_plus_DMFT
       const int n_spin,
       const int nbasis )
   {
-    this->flag_DFT_solver = DFT_solver;
+    this->dft_solver = DFT_solver;
     this->mixing_param = mixing_parameter;
     this->max_mixing_step = mixing_step;
     this->sc_delta_rho = delta_rho;
@@ -178,7 +178,7 @@ namespace DFT_plus_DMFT
     GLV::ofs_running << "Sum of fik of core bands: " << core_fik << std::endl; 
     */
 
-    // DFT_output::overlap_matrix ovlp(this->flag_DFT_solver, "dft/outputs_to_DMFT/overlap_matrix");
+    // DFT_output::overlap_matrix ovlp(this->dft_solver, "dft/outputs_to_DMFT/overlap_matrix");
     // const int n_basis = ovlp.ovlp_aims.nbasis();
     // std::vector<std::complex<double>> mat_tmp(n_basis*n_basis);
     std::vector<Matrix> eigenvector;
@@ -192,7 +192,7 @@ namespace DFT_plus_DMFT
 
     for(int ik=0; ik<task_nks; ik++){
       this->eva_DFT_DMFT_k_densmat(
-          this->flag_DFT_solver, 
+          this->dft_solver,
           ik, k_map[ik], 
           space, eigenvector,
           this->dens_mat_out[ik] );
@@ -268,7 +268,7 @@ namespace DFT_plus_DMFT
     std::vector<Matrix> eigenvector;
     for(int ik=0; ik<task_nks; ik++){
       this->eva_DFT_k_densmat(
-          this->flag_DFT_solver, ik, 
+          this->dft_solver, ik,
           k_map[ik], dft_occ_num_local, eigenvector,
           this->dens_mat_out[ik] );
 
@@ -301,7 +301,7 @@ namespace DFT_plus_DMFT
   }
 
   void Charge_SCF::eva_DFT_DMFT_k_densmat(
-        const int dft_solver,
+        const std::string& dft_solver,
         const int ik,
         const int i_k_point,
         DFT_plus_DMFT::Hilbert_space& space,
@@ -344,7 +344,7 @@ namespace DFT_plus_DMFT
   }
 
   void Charge_SCF::eva_DFT_k_densmat(
-        const int dft_solver,
+        const std::string& dft_solver,
         const int ik,
         const int i_k_point,
         const std::vector<std::vector<
