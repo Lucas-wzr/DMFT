@@ -7,31 +7,16 @@
 #include <fstream>
 #include <iostream>
 #include <cstring>
-#include <iomanip>   //use setw and setprecison function
+#include <cctype>
+#include <iomanip>
 #include <cstdlib>
 #include <cerrno>
 #include <cmath>
 #include <string>
-#include <stdexcept>
-
-namespace
-{
-  double parse_cwf_value(const std::string& keyword,
-                         const std::string& text)
-  {
-    errno = 0;
-    char* end = NULL;
-    const double value = std::strtod(text.c_str(), &end);
-    if(end == text.c_str() || *end != '\0' || errno == ERANGE ||
-       !std::isfinite(value))
-    {
-      std::cerr << "Invalid numeric value for " << keyword
-                << ": " << text << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    return value;
-  }
-}
+#include <map>
+#include <set>
+#include <sstream>
+#include <limits>
 
 namespace DMFT
 {
@@ -39,1002 +24,321 @@ namespace DMFT
   {
     debug::codestamp("input_info::read");
 
-    // GLV::ofs_running << "Reading DMFT.in ......" << std::endl;
-    GLV::ofs_running << "=========== All parameters used in the running time ===========" << std::endl;
+    // 步骤 1：仅为第 2 类参数设置固定默认值。
+    // 第 1 类无默认值，第 4 类待依赖确定后补齐，第 3 类在校验后计算。
+    params.calculation = "scf";
+    params.dft_solver = "aims";
+    params.temperature = 300.0;
+    params.magnetism = "para";
+    params.impurity_solver = "rutgers-cthyb";
+    params.interaction_type = "density_density";
+    params.double_counting = "fll";
+    params.projection_window = {-5.0, 5.0};
+    params.max_charge_step = params.max_dmft_step = params.max_dft_step = 1;
+    params.mc_step = 5000000;
+    params.warmup = 100000;
+    params.comctqmc_nproc = 0;
+    params.comctqmc_exe = "CTQMC";
+    params.comctqmc_evalsim = "EVALSIM";
+    params.comctqmc_launcher = "comctqmc-launch";
+    params.delta_sigma = 0.1;
+    params.delta_rho = 1.0e-3;
+    params.mixing_step = 8;
+    params.charge_mix_param = 0.05;
+    params.projector = "nao";
+    params.cwf_ep0 = -5.0;
+    params.cwf_ep1 = 5.0;
+    params.cwf_t = 0.01;
+    params.projection_min_weight = 0.3;
+    params.hyb_func = false;
+    params.hyf_xc_alpha = 1.0;
+    params.flag_hyf_dc_mode = 1;
+    params.hyf_dc_shift_d = params.hyf_dc_shift_p = 0.0;
+    params.start_charge_step = params.start_DMFT_step = params.last_charge_step = params.last_DMFT_step = 1;
+    params.local_symmetry = 0;
 
-    //calculation
-    try {
-      std::vector<std::string> str_val;
-      this->read_parameter("calculation", str_val);
-
-      if(std::strcmp("scf", this->strtolower(str_val[0]).c_str())==0)
-        this->calculation_type = 0;
-      else if(std::strcmp("spectra", this->strtolower(str_val[0]).c_str())==0)
-        this->calculation_type = 1;
-      else{
-        std::cerr << "Unsupported paramater for the key calculation" << std::endl;
-        std::exit(EXIT_FAILURE);
-      }  
-    }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
+    // 步骤 2：一次读完文件，记录显式输入，再进行类型转换。
+    std::map<std::string, std::vector<std::string>> input_entries;
+    std::ifstream ifs("DMFT.in");
+    if(!ifs) {
+      std::cerr << "Fail to open file DMFT.in" << std::endl;
       std::exit(EXIT_FAILURE);
     }
-    catch(const bool not_given){
-      // GLV::ofs_running << "Warning: calculation is not given and set default value scf" << std::endl;
-      this->calculation_type = 0;
+    // fail：输出关键词 key 及错误原因 message，然后以失败状态退出程序。
+    auto fail = [&](const std::string& key, const std::string& message) {
+      std::cerr << "DMFT.in";
+      std::cerr << ": " << key << ": " << message << std::endl;
+      std::exit(EXIT_FAILURE);
+    };
+
+    std::string line;
+    while(std::getline(ifs, line)) {
+      const auto comment = line.find('#');
+      if(comment != std::string::npos) line.erase(comment);
+      std::istringstream tokens(line);
+      std::string key, word;
+      if(!(tokens >> key)) continue;
+      key = strtolower(key);
+      if(input_entries.count(key)) fail(key, "duplicate keyword");
+      std::vector<std::string> words;
+      while(tokens >> word) words.push_back(word);
+      input_entries.emplace(key, words);
     }
+    if(ifs.bad()) fail("input", "failed while reading file");
 
-    GLV::ofs_running << "calculation  ";
-    if(this->calculation_type==0) GLV::ofs_running << "scf" << std::endl;
-    else if(this->calculation_type==1) GLV::ofs_running << "spectra" << std::endl;
+    // recognized 保存程序支持的关键词，后面用来检查未知关键词。
+    std::set<std::string> recognized;
+    // supplied：登记关键词 key，并判断用户是否提供了它。
+    // 未提供返回 false；提供时检查值的个数是否为 count，正确才返回 true。
+    auto supplied = [&](const std::string& key, int count) {
+      recognized.insert(key);
+      if(!input_entries.count(key)) return false;
+      if(input_entries.at(key).size() != static_cast<std::size_t>(count))
+        fail(key, "expected " + std::to_string(count) + " value(s)");
+      return true;
+    };
 
-    //dft_solver
-    try {
-      std::vector<std::string> str_val;
-      this->read_parameter("dft_solver", str_val);
-
-      if(std::strcmp("aims",this->strtolower(str_val[0]).c_str())==0){
-        this->flag_DFT_solver = 1;
-        #ifndef __FHIaims
-          std::cerr << "FHI-aims has not been installed!!!  ";
-          std::cerr << "Suggestion:Install FHI-aims and then re-compile the codes." << std::endl;
-          std::exit(EXIT_FAILURE);
-        #endif
+    // real：读取 key 对应的单个浮点数，写入 value 引用的原变量。
+    auto real = [&](const std::string& key, double& value) {
+      if(!supplied(key, 1)) return;
+      const std::string& text = input_entries.at(key)[0];
+      errno = 0;
+      char* end = nullptr;
+      const double parsed_input = std::strtod(text.c_str(), &end);
+      if(end == text.c_str() || *end != '\0' || errno == ERANGE || !std::isfinite(parsed_input))
+        fail(key, "invalid real value '" + text + "'");
+      value = parsed_input;
+    };
+    // integer_value：将 text 严格转换为十进制 long long 整数并返回。
+    // key 仅用于报错定位；此函数不查找输入项，也不设置默认值。
+    auto integer_value = [&](const std::string& key, const std::string& text) {
+      errno = 0;
+      char* end = nullptr;
+      const long long value = std::strtoll(text.c_str(), &end, 10);
+      if(end == text.c_str() || *end != '\0' || errno == ERANGE)
+        fail(key, "invalid integer value '" + text + "'");
+      return value;
+    };
+    // integer：读取 key 对应的单个整数，检查 int 范围后写入 value。
+    // 未提供时不修改 value；转换文本复用上面的 integer_value。
+    auto integer = [&](const std::string& key, int& value) {
+      if(!supplied(key, 1)) return;
+      const long long parsed_input = integer_value(key, input_entries.at(key)[0]);
+      if(parsed_input < std::numeric_limits<int>::min() || parsed_input > std::numeric_limits<int>::max())
+        fail(key, "integer out of range");
+      value = static_cast<int>(parsed_input);
+    };
+    // option：读取字符串选项并转成小写，在 options 的“名称—整数”表中匹配。
+    // 匹配后将对应整数写入 value；未提供则不修改，不支持的名称报错。
+    auto option = [&](const std::string& key, int& value,
+                      std::initializer_list<std::pair<const char*, int>> options) {
+      if(!supplied(key, 1)) return;
+      const std::string parsed_input = strtolower(input_entries.at(key)[0]);
+      for(const auto& choice : options)
+        if(parsed_input == choice.first) { value = choice.second; return; }
+      fail(key, "unsupported option '" + parsed_input + "'");
+    };
+    // string_option: validate an option and store its canonical string value.
+    auto string_option = [&](const std::string& key, std::string& value,
+                             std::initializer_list<std::pair<const char*, const char*>> options) {
+      if(!supplied(key, 1)) return;
+      const std::string parsed_input = strtolower(input_entries.at(key)[0]);
+      for(const auto& choice : options)
+        if(parsed_input == choice.first) { value = choice.second; return; }
+      fail(key, "unsupported option '" + parsed_input + "'");
+    };
+    // window：读取两个浮点数，依次写入 value 的窗口下界和上界。
+    // 未提供时不修改 value；这里只检查数值格式，窗口之间的约束在步骤 4 检查。
+    auto window = [&](const std::string& key, std::vector<double>& value) {
+      if(!supplied(key, 2)) return;
+      value.resize(2);
+      for(int i = 0; i < 2; ++i) {
+        const std::string& text = input_entries.at(key)[i];
+        errno = 0;
+        char* end = nullptr;
+        value[i] = std::strtod(text.c_str(), &end);
+        if(end == text.c_str() || *end != '\0' || errno == ERANGE || !std::isfinite(value[i]))
+          fail(key, "invalid real value '" + text + "'");
       }
-      else if(std::strcmp("abacus", this->strtolower(str_val[0]).c_str())==0){
-        this->flag_DFT_solver = 2;
-        #ifndef __ABACUS
-          std::cerr << "ABACUS has not been installed!!!   ";
-          std::cerr << "Suggestion:Install ABACUS and then re-compile the codes." << std::endl;
-          std::exit(EXIT_FAILURE);
-        #endif
-      }
-      else
-      {
-        std::cerr << "unsupported value of DFT_solver" << std::endl;
-        std::exit(EXIT_FAILURE);
-      }
-    }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch(const bool not_given){
-      // GLV::ofs_running << "Warning: dft_solver is not given and set default value aims" << std::endl;
-      this->flag_DFT_solver = 1;   //FHI-aims
-      #ifndef __FHIaims
-        std::cerr << "FHI-aims has not been installed!!!  ";
-        std::cerr << "Suggestion:Install FHI-aims and then re-compile the codes." << std::endl;
-        std::exit(EXIT_FAILURE);
-      #endif
-    }
-    GLV::ofs_running << "dft_solver  ";
-    if(this->flag_DFT_solver==1) GLV::ofs_running << "aims" << std::endl;
-    else if(this->flag_DFT_solver==2) GLV::ofs_running << "abacus" << std::endl;
+    };
+    // text：读取 key 对应的单个字符串，原样保留，不做大小写规范化（可能是路径或可执行文件名）。
+    auto text = [&](const std::string& key, std::string& value) {
+      if(!supplied(key, 1)) return;
+      value = input_entries.at(key)[0];
+    };
 
-    //temperature
-    try {
-      std::vector<std::string> str_val;
-      this->read_parameter("temperature", str_val);
-
-      this->temperature = atof(str_val[0].c_str());
-    }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch(const bool not_given){
-      // GLV::ofs_running << "Warning: temperature is not given and set default value 300 Kelven" << std::endl;
-      this->temperature = 300.0;
-    }
-    GLV::ofs_running << "temperature  " << this->temperature << std::endl;
-
-    this->beta = GLC::Hartree_to_eV/(this->temperature*GLC::K_BOLTZMAN_EV);
-    // this->n_tau = 25/(this->temperature*K_BOLTZMAN_EV) > 500 ? 25/(this->temperature*K_BOLTZMAN_EV) : 500;
-    this->n_tau = 25/(this->temperature*GLC::K_BOLTZMAN_EV);
-    // this->n_omega = this->n_tau > 500 ? 500 : this->n_tau;
-    //the energy maximum is 100eV, which may be a safe value to guarantee the Asymptotic behavior of hybridization function
-    this->n_omega = 100/(GLC::PI*this->temperature*GLC::K_BOLTZMAN_EV); 
-    // this->n_omega = 500; // ? 500 : this->n_tau;
-    if(this->n_tau%2==1) this->n_tau++;   //n_tau+1 must be odd for Simpson integral
-    if(this->n_omega%2==1) this->n_omega++;
-
-    //magnetism
-    try {
-      std::vector<std::string> str_val;
-      this->read_parameter("magnetism", str_val);
-    
-      if(std::strcmp("afm",this->strtolower(str_val[0]).c_str())==0) this->flag_magnetism = 1;
-      else if(std::strcmp("fm",this->strtolower(str_val[0]).c_str())==0) this->flag_magnetism = 2;
-      else if(std::strcmp("para",this->strtolower(str_val[0]).c_str())==0) this->flag_magnetism = 3;
-      else if(std::strcmp("none",this->strtolower(str_val[0]).c_str())==0) this->flag_magnetism = 4;
-      else
-      {
-        std::cerr << "unsupported value of magnetism" << std::endl;
-        std::exit(EXIT_FAILURE);
-      }
-    }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch(const bool not_given){
-      this->flag_magnetism = 3;
-      // std::cerr << "Error: parameter magnetism must be given!!!" << std::endl;
-      // std::exit(EXIT_FAILURE);
-    }
-    GLV::ofs_running << "magnetism  ";
-    if(this->flag_magnetism==1) GLV::ofs_running << "afm" << std::endl;
-    else if(this->flag_magnetism==2) GLV::ofs_running << "fm" << std::endl;
-    else if(this->flag_magnetism==3) GLV::ofs_running << "para" << std::endl;
-    else if(this->flag_magnetism==4) GLV::ofs_running << "none" << std::endl;
-
-    //impurity_solver
-    try {
-      std::vector<std::string> str_val;
-      this->read_parameter("impurity_solver", str_val);
-
-      if(std::strcmp("alps-cthyb",this->strtolower(str_val[0]).c_str())==0) 
-      {
-        this->flag_impurity_solver = 1;
-        std::cerr << "ALPS-CTHYB is unsupported now" << std::endl;
-        std::exit(EXIT_FAILURE);
-      }
-      else if(std::strcmp("alps-cthyb-segment",this->strtolower(str_val[0]).c_str())==0)
-      {
-        this->flag_impurity_solver = 2;
-        std::cerr << "ALPS-CTHYB-SEGMENT is unsupported now" << std::endl;
-        std::exit(EXIT_FAILURE);
-      }
-      else if(std::strcmp("pacs", this->strtolower(str_val[0]).c_str())==0)
-        this->flag_impurity_solver = 3;
-      else if(std::strcmp("rutgers-cthyb",this->strtolower(str_val[0]).c_str())==0)
-        this->flag_impurity_solver = 4;
-      else if(std::strcmp("iqist",this->strtolower(str_val[0]).c_str())==0)
-        this->flag_impurity_solver = 5;
-      else if(this->strtolower(str_val[0])=="comctqmc")
-        this->flag_impurity_solver = 6;
-      else
-      {
-        std::cerr << "unsupported value of impurity_solver " << this->strtolower(str_val[0]) << std::endl;
-        std::exit(EXIT_FAILURE);
-      }
-    }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch(const bool not_given){
-      GLV::ofs_running << "Warning: impurity_solver is not given and set default value Rutgers" << std::endl;
-      this->flag_impurity_solver = 4;
-    }
-    GLV::ofs_running << "impurity_solver  ";
-    if(this->flag_impurity_solver==1) GLV::ofs_running << "alps-cthyb" << std::endl;
-    else if(this->flag_impurity_solver==2) GLV::ofs_running << "alps-cthyb-segment" << std::endl;
-    else if(this->flag_impurity_solver==3) GLV::ofs_running << "pacs" << std::endl;
-    else if(this->flag_impurity_solver==4) GLV::ofs_running << "rutgers-cthyb" << std::endl;
-    else if(this->flag_impurity_solver==5) GLV::ofs_running << "iqist" << std::endl;
-    else if(this->flag_impurity_solver==6) GLV::ofs_running << "comctqmc" << std::endl;
-
-    //interaction_type
-    this->flag_interaction_type = 1;
-    try {
-      std::vector<std::string> str_val;
-      this->read_parameter("interaction_type", str_val);
-      const std::string value = this->strtolower(str_val[0]);
-      if(value=="density_density") this->flag_interaction_type = 1;
-      else if(value=="kanamori") this->flag_interaction_type = 2;
-      else if(value=="slater_condon") this->flag_interaction_type = 3;
-      else if(value=="tensor") this->flag_interaction_type = 4;
-      else {
-        std::cerr << "Unsupported interaction_type " << value << std::endl;
-        std::exit(EXIT_FAILURE);
-      }
-    }
-    catch(const bool not_given) { (void)not_given; }
-    catch(const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    if(this->flag_interaction_type!=1 && this->flag_impurity_solver!=4 && this->flag_impurity_solver!=6) {
-      std::cerr << "General interactions require rutgers-cthyb or comctqmc" << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    GLV::ofs_running << "interaction_type  "
-      << (this->flag_interaction_type==1 ? "density_density" :
-          this->flag_interaction_type==2 ? "kanamori" :
-          this->flag_interaction_type==3 ? "slater_condon" : "tensor") << std::endl;
-
-    //double_counting
-    try {
-      std::vector<std::string> str_val;
-      this->read_parameter("double_counting", str_val);
-
-      if(std::strcmp("fll", this->strtolower(str_val[0]).c_str())==0)
-        this->flag_double_counting = 1;
-      else if(std::strcmp("nominal",this->strtolower(str_val[0]).c_str())==0) 
-        this->flag_double_counting = 2;
-      else if(std::strcmp("arbitrary",this->strtolower(str_val[0]).c_str())==0) 
-        this->flag_double_counting = 3;
-      else
-      {
-        std::cerr << "unsupported value of double_counting" << std::endl;
-        std::exit(EXIT_FAILURE);
-      }
-
-    }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch(const bool not_given){
-      // GLV::ofs_running << "Warning: double_counting is not given and set default value fll" << std::endl;
-      this->flag_double_counting = 1;
-    }
-    GLV::ofs_running << "double_counting  ";
-    if(this->flag_double_counting==1) GLV::ofs_running << "fll" << std::endl;
-    else if(this->flag_double_counting==2) GLV::ofs_running << "nominal" << std::endl;
-    else if(this->flag_double_counting==3) GLV::ofs_running << "arbitrary" << std::endl;
-    
-    try
-    {
-      std::vector<std::string> str_val;
-      this->read_parameter("nf", str_val);
-      this->nf = atof(str_val[0].c_str()); 
-    }
-    catch (const std::string messg)
-    {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch (const bool not_given)
-    {
-      this->nf = 1.0;
-    }
-    if(this->flag_double_counting==2) GLV::ofs_running << "nf  " << this->nf << std::endl;
-
-    //projection_energy_window
-    try {
-      std::vector<std::string> str_val;
-      this->read_parameter("projection_window", str_val, 2);
-      this->proj_window.resize(2);
-      this->proj_window[0] = atof(str_val[0].c_str());
-      this->proj_window[1] = atof(str_val[1].c_str());
-    }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch(const bool not_given){
-      // GLV::ofs_running << "Warning: energy_window is not given and set default value -5.0~5.0" << std::endl;
-      this->proj_window[0] = -5.0;
-      this->proj_window[1] = 5.0;
-    }
-    GLV::ofs_running << "projection_window  " 
-            << std::setprecision(3) << this->proj_window[0] 
-            << "  "
-            << std::setprecision(3) << this->proj_window[1] << std::endl;
-    
-    //DOS_window
-    try {
-      std::vector<std::string> str_val;
-      this->read_parameter("dos_window", str_val, 2);
-      this->DOS_window.resize(2);
-      this->DOS_window[0] = atof(str_val[0].c_str());
-      this->DOS_window[1] = atof(str_val[1].c_str());
-    }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch(const bool not_given){
-      this->DOS_window[0] = this->proj_window[0];
-      this->DOS_window[1] = this->proj_window[0];
-    }
-    if(this->DOS_window[0]>this->proj_window[0] || this->DOS_window[1]<this->proj_window[1]){
-      std::cerr << "The DOS window must be larger than projection window!!!" << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    GLV::ofs_running << "DOS_window  " 
-            << std::setprecision(3) << this->DOS_window[0] 
-            << "  "
-            << std::setprecision(3) << this->DOS_window[1] << std::endl;
-            
-    //max_charge_step
-    try {
-      std::vector<std::string> str_val;
-      this->read_parameter("max_charge_step", str_val);
-
-      this->charge_step_max = atoi(str_val[0].c_str());
-    }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch(const bool not_given){
-      // GLV::ofs_running << "Warning: max_charge_step is not given and set default value 1, i.e., one-shoot DFT+DMFT." << std::endl;
-      this->charge_step_max = 1;
-    }
-    GLV::ofs_running << "max_charge_step  " << this->charge_step_max << std::endl;
-
-    //max_dmft_step
-    try {
-      std::vector<std::string> str_val;
-      this->read_parameter("max_dmft_step", str_val);
-
-      this->DMFT_step_max = atoi(str_val[0].c_str());
-    }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch(const bool not_given){
-      // GLV::ofs_running << "Warning: max_dmft_step is not given and set default value 1" << std::endl;
-      this->DMFT_step_max = 1;
-    }
-    GLV::ofs_running << "max_dmft_step  " << this->DMFT_step_max << std::endl;
-
-    //max_dft_step
-    try {
-      std::vector<std::string> str_val;
-      this->read_parameter("max_dft_step", str_val);
-
-      this->DFT_step_max = atoi(str_val[0].c_str());
-    }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch(const bool not_given){
-      // GLV::ofs_running << "Warning: max_dmft_step is not given and set default value 1" << std::endl;
-      this->DFT_step_max = 1;
-    }
-    GLV::ofs_running << "max_dft_step  " << this->DFT_step_max << std::endl;
-
-    //dft_solver_exe
-    /*
-    try {
-      std::vector<std::string> str_val;
-      
-      this->read_parameter("dft_solver_exe", str_val);
-
-      this->dft_solver_exe = str_val[0];
-    }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch(const bool not_given){
-      if(this->charge_step_max>1){
-        std::cerr << "DFT_solver_exe must be given in charge scf DFT+DMFT calculations" << std::endl;
-        std::exit(EXIT_FAILURE);
-      }
-      else
-        this->dft_solver_exe = "";
-    }
-    GLV::ofs_running << "dft_solver_exe  " << this->dft_solver_exe << std::endl;
-    */
-
-    //delta_sigma
-    try {
-      std::vector<std::string> str_val;
-      this->read_parameter("delta_sigma", str_val);
-
-      this->delta_sigma = atof(str_val[0].c_str());
-    }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch(const bool not_given){
-      // GLV::ofs_running << "Warning: max_charge_step is not given and set default value 1, i.e., non self-consitent DFT+DMFT." << std::endl;
-      this->delta_sigma = 0.1;
-    }
-    GLV::ofs_running << "delta_sigma  " 
-            << std::setprecision(3) << std::setiosflags(std::ios::scientific)
-            << this->delta_sigma << std::endl;
-
-    //delta_rho
-    try {
-      std::vector<std::string> str_val;
-      this->read_parameter("delta_rho", str_val);
-
-      this->delta_rho = atof(str_val[0].c_str());
-    }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch(const bool not_given){
-      // GLV::ofs_running << "Warning: max_charge_step is not given and set default value 1, i.e., non self-consitent DFT+DMFT." << std::endl;
-      this->delta_rho = 1.0e-3;
-    }
-    GLV::ofs_running << "delta_rho  " 
-            << std::setprecision(3) << std::setiosflags(std::ios::scientific)
-            << this->delta_rho << std::endl;
-
-    //mixing_step
-    try {
-      std::vector<std::string> str_val;
-      this->read_parameter("mixing_step", str_val);
-
-      this->mixing_step = atoi(str_val[0].c_str());
-    }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch(const bool not_given){
-      // GLV::ofs_running << "Warning: max_charge_step is not given and set default value 1, i.e., non self-consitent DFT+DMFT." << std::endl;
-      this->mixing_step = 8;
-    }
-    GLV::ofs_running << "mixing_step  " << this->mixing_step << std::endl;
-
-    //charge_mix_param
-    try {
-      std::vector<std::string> str_val;
-      this->read_parameter("charge_mix_param", str_val);
-
-      this->charge_mix_param = atof(str_val[0].c_str());
-    }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch(const bool not_given){
-      // GLV::ofs_running << "Warning: charge mixing parameter is not given and set default value 0.05" << std::endl;
-      this->charge_mix_param = 0.05;
-    }
-    GLV::ofs_running << "charge_mix_param  " 
-        << std::setprecision(3) << std::setiosflags(std::ios::scientific)
-        << this->charge_mix_param << std::endl;
-
-    //mc_step
-    try {
-      std::vector<std::string> str_val;
-      this->read_parameter("mc_step", str_val);
-
-      this->MC_step = std::atoll(str_val[0].c_str());
-    }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch(const bool not_given){
-      // GLV::ofs_running << "Warning: mc_step is not given and set default value 5000000" << std::endl;
-      this->MC_step = 5000000;
-    }
-    GLV::ofs_running << "mc_step  " << this->MC_step << std::endl;
-
-    this->comctqmc_nproc = 0;
-    this->warmup = 100000;
-    this->comctqmc_exe = "CTQMC";
-    this->comctqmc_evalsim = "EVALSIM";
-    this->comctqmc_launcher = "comctqmc-launch";
-    if(this->flag_impurity_solver==6)
-    {
-      try {
-        for(const std::string key : {"comctqmc_nproc", "warmup",
-              "comctqmc_exe", "comctqmc_evalsim", "comctqmc_launcher"})
-        {
-          std::vector<std::string> value;
-          try { this->read_parameter(const_cast<char*>(key.c_str()), value); }
-          catch(const bool not_given) { continue; }
-          if(key=="comctqmc_nproc") this->comctqmc_nproc = std::stoi(value[0]);
-          else if(key=="warmup") this->warmup = std::stoll(value[0]);
-          else if(key=="comctqmc_exe") this->comctqmc_exe = value[0];
-          else if(key=="comctqmc_evalsim") this->comctqmc_evalsim = value[0];
-          else this->comctqmc_launcher = value[0];
-        }
-        if(this->comctqmc_nproc<0 || this->warmup<0 || this->MC_step<=0)
-          throw std::runtime_error("Invalid ComCTQMC sampling controls");
-      }
-      catch(const std::string& message) {
-        std::cerr << message << std::endl;
-        std::exit(EXIT_FAILURE);
-      }
-      catch(const std::exception& error) {
-        std::cerr << error.what() << std::endl;
-        std::exit(EXIT_FAILURE);
-      }
-      GLV::ofs_running << "comctqmc_nproc  " << this->comctqmc_nproc << '\n'
-        << "warmup  " << this->warmup << '\n'
-        << "comctqmc_exe  " << this->comctqmc_exe << '\n'
-        << "comctqmc_evalsim  " << this->comctqmc_evalsim << '\n'
-        << "comctqmc_launcher  " << this->comctqmc_launcher << std::endl;
-    }
-
-    int local_symmetry_tmp;
-    try {
-      std::vector<std::string> str_val;
-      this->read_parameter("local_symmetry", str_val);
-      local_symmetry_tmp = atoi(str_val[0].c_str());
-    }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch(const bool not_given){
-      // GLV::ofs_running << "Warning: local_symmetry is not given and set default value 0" << std::endl;
-      local_symmetry_tmp = 0;
-    }
-    GLV::ofs_running << "local_symmetry  " << local_symmetry_tmp << std::endl;
-
-    //projector
-    try {
-      std::vector<std::string> str_val;
-      this->read_parameter("projector", str_val);
-
-      const std::string projector_name = this->strtolower(str_val[0]);
-      if(std::strcmp("default", projector_name.c_str())==0 ||
-         std::strcmp("nao", projector_name.c_str())==0)
-        this->flag_projector = 1;
-      else if(std::strcmp("cwf", projector_name.c_str())==0)
-        this->flag_projector = 2;
-      else
-      {
-        std::cerr << "Unsupported projector '" << str_val[0]
-                  << "'; expected default (legacy alias: nao) or cwf"
-                  << std::endl;
-        std::exit(EXIT_FAILURE);
-      }
-
-    }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch(const bool not_given){
-      this->flag_projector = 1;
-    }
-    if(this->flag_projector ==1) GLV::ofs_running << "projector  default" << std::endl;
-    else if(this->flag_projector ==2) GLV::ofs_running << "projector  cwf" << std::endl;
-
-    try {
-      std::vector<std::string> str_val;
-      this->read_parameter("projection_min_weight", str_val);
-      this->projection_min_weight = parse_cwf_value("projection_min_weight", str_val[0]);
-    }
-    catch(const std::string messg){
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch(const bool not_given){
-      this->projection_min_weight = 0.9;
-    }
-    if(!(this->projection_min_weight > 0.0 && this->projection_min_weight <= 1.0)){
-      std::cerr << "projection_min_weight must be in (0,1]" << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    GLV::ofs_running << "projection_min_weight  " << this->projection_min_weight << std::endl;
-
-    //closest wannier function
-    try {
-      std::vector<std::string> str_val;
-      this->read_parameter("cwf_ep0", str_val);
-      this->cwf_ep0 = parse_cwf_value("cwf_ep0", str_val[0]);
-    }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch(const bool not_given){
-      this->cwf_ep0 = -5.0;
-    }
-    try {
-      std::vector<std::string> str_val;
-      this->read_parameter("cwf_ep1", str_val);
-      this->cwf_ep1 = parse_cwf_value("cwf_ep1", str_val[0]);
-    }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch(const bool not_given){
-      this->cwf_ep1 = 5.0;
-    }
-    try {
-      std::vector<std::string> str_val;
-      this->read_parameter("cwf_t", str_val);
-      this->cwf_t = parse_cwf_value("cwf_t", str_val[0]);
-    }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch(const bool not_given){
-      this->cwf_t = 0.01;
-    }
-    if(this->flag_projector==2){
-      if(!(this->cwf_ep0 < this->cwf_ep1) || !(this->cwf_t > 0.0))
-      {
-        std::cerr << "Invalid CWF parameters: require cwf_ep0 < cwf_ep1 "
-                  << "and cwf_t > 0 (all in eV)" << std::endl;
-        std::exit(EXIT_FAILURE);
-      }
-      GLV::ofs_running << "cwf_ep0  " << std::setprecision(12)
-                       << this->cwf_ep0 << " eV relative to E_F" << std::endl;
-      GLV::ofs_running << "cwf_ep1  " << std::setprecision(12)
-                       << this->cwf_ep1 << " eV relative to E_F" << std::endl;
-      GLV::ofs_running << "cwf_t    " << std::setprecision(12)
-                       << this->cwf_t << " eV" << std::endl;
-    }
-
-    //dft_xc
-    try {
-      std::vector<std::string> str_val;
-      this->read_parameter("dft_xc", str_val);
-
-      if(std::strcmp("hybrid", this->strtolower(str_val[0]).c_str())==0)
-        this->hyb_func = true;
-      else
-        this->hyb_func = false;
-      
-    }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch(const bool not_given){
-      this->hyb_func = false;
-    }
-
-    //hyf_xc_alpha
-    try{
-      std::vector<std::string> str_val;
-      this->read_parameter("hyf_xc_alpha", str_val);
-
-      this->hyf_xc_alpha = atof(str_val[0].c_str());
-    }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch (const bool not_given){
-      this->hyf_xc_alpha = 1.0;
-    }
-    GLV::ofs_running << "hyf_xc_alpha  " << std::setprecision(3) << this->hyf_xc_alpha << std::endl;
-
-    //hyf_dc_mode
-    try{
-      std::vector<std::string> str_val;
-      this->read_parameter("hyf_dc_mode", str_val);
-
-      if(std::strcmp("jacob", this->strtolower(str_val[0]).c_str())==0
-           || std::strcmp("jacob2008", this->strtolower(str_val[0]).c_str())==0)
-        this->flag_hyf_dc_mode = 1;
-      else if(std::strcmp("jacob_dp", this->strtolower(str_val[0]).c_str())==0
-           || std::strcmp("jacob-dp", this->strtolower(str_val[0]).c_str())==0)
-        this->flag_hyf_dc_mode = 2;
-      else{
-        std::cerr << "unsupported value of hyf_dc_mode" << std::endl;
-        std::exit(EXIT_FAILURE);
+    // 第 2 类：用户输入覆盖固定默认值；未填写时保留默认值。
+    string_option("calculation", params.calculation, {{"scf", "scf"}, {"spectra", "spectra"}});
+    string_option("dft_solver", params.dft_solver, {{"aims", "aims"}, {"abacus", "abacus"}});
+    real("temperature", params.temperature);
+    string_option("magnetism", params.magnetism,
+                  {{"afm", "afm"}, {"fm", "fm"}, {"para", "para"}, {"none", "none"}});
+    string_option("impurity_solver", params.impurity_solver,
+                  {{"alps-cthyb", "alps-cthyb"}, {"alps-cthyb-segment", "alps-cthyb-segment"},
+                   {"pacs", "pacs"}, {"rutgers-cthyb", "rutgers-cthyb"}, {"iqist", "iqist"},
+                   {"comctqmc", "comctqmc"}});
+    string_option("interaction_type", params.interaction_type,
+                  {{"density_density", "density_density"}, {"kanamori", "kanamori"},
+                   {"slater_condon", "slater_condon"}, {"tensor", "tensor"}});
+    string_option("double_counting", params.double_counting,
+                  {{"fll", "fll"}, {"nominal", "nominal"}, {"arbitrary", "arbitrary"}});
+    window("projection_window", params.projection_window);
+    integer("max_charge_step", params.max_charge_step);
+    integer("max_dmft_step", params.max_dmft_step);
+    integer("max_dft_step", params.max_dft_step);
+    real("delta_sigma", params.delta_sigma);
+    real("delta_rho", params.delta_rho);
+    integer("mixing_step", params.mixing_step);
+    real("charge_mix_param", params.charge_mix_param);
+    if(supplied("mc_step", 1)) params.mc_step = integer_value("mc_step", input_entries.at("mc_step")[0]);
+    // ComCTQMC 的采样与启动参数：任何求解器下都接受这些关键词，取值只在 comctqmc 时生效。
+    integer("comctqmc_nproc", params.comctqmc_nproc);
+    if(supplied("warmup", 1)) params.warmup = integer_value("warmup", input_entries.at("warmup")[0]);
+    text("comctqmc_exe", params.comctqmc_exe);
+    text("comctqmc_evalsim", params.comctqmc_evalsim);
+    text("comctqmc_launcher", params.comctqmc_launcher);
+    integer("local_symmetry", params.local_symmetry);
+    string_option("projector", params.projector, {{"nao", "nao"}, {"default", "nao"}, {"cwf", "cwf"}});
+    real("cwf_ep0", params.cwf_ep0);
+    real("cwf_ep1", params.cwf_ep1);
+    real("cwf_t", params.cwf_t);
+    real("projection_min_weight", params.projection_min_weight);
+    // 保留现有 dft_xc 约定：只有 hybrid 启用杂化泛函。
+    if(supplied("dft_xc", 1)) params.hyb_func = strtolower(input_entries.at("dft_xc")[0]) == "hybrid";
+    real("hyf_xc_alpha", params.hyf_xc_alpha);
+    option("hyf_dc_mode", params.flag_hyf_dc_mode,
+           {{"jacob", 1}, {"jacob2008", 1}, {"jacob_dp", 2}, {"jacob-dp", 2}});
+    real("hyf_dc_shift_d", params.hyf_dc_shift_d);
+    real("hyf_dc_shift_p", params.hyf_dc_shift_p);
+    if(supplied("restart", 4)) {
+      int* steps[] = {&params.start_charge_step, &params.start_DMFT_step, &params.last_charge_step, &params.last_DMFT_step};
+      for(int i = 0; i < 4; ++i) {
+        const long long value = integer_value("restart", input_entries.at("restart")[i]);
+        if(value < 1 || value > std::numeric_limits<int>::max()) fail("restart", "steps must be positive integers in range");
+        *steps[i] = static_cast<int>(value);
       }
     }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch (const bool not_given){
-      this->flag_hyf_dc_mode = 1;
-    }
-    GLV::ofs_running << "hyf_dc_mode  ";
-    if(this->flag_hyf_dc_mode==1) GLV::ofs_running << "jacob" << std::endl;
-    else if(this->flag_hyf_dc_mode==2) GLV::ofs_running << "jacob_dp" << std::endl;
+    // 第 1 类：读取条件必填参数，不补默认值；必填条件在步骤 4 检查。
+    real("nf", params.nf);
 
-    //hyf_dc_shift_d
-    try{
-      std::vector<std::string> str_val;
-      this->read_parameter("hyf_dc_shift_d", str_val);
+    // 第 4 类：先读取用户覆盖值；未填写的项在步骤 3 自动补齐。
+    integer("dmft_step_first", params.dmft_step_first);
+    window("dos_window", params.dos_window);
 
-      this->hyf_dc_shift_d = atof(str_val[0].c_str());
-    }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch (const bool not_given){
-      this->hyf_dc_shift_d = 0.0;
-    }
-    GLV::ofs_running << "hyf_dc_shift_d  " << std::setprecision(6) << this->hyf_dc_shift_d << " eV" << std::endl;
+    // 第 3 类没有独立输入关键词，统一在步骤 5 计算。
 
-    //hyf_dc_shift_p
-    try{
-      std::vector<std::string> str_val;
-      this->read_parameter("hyf_dc_shift_p", str_val);
-
-      this->hyf_dc_shift_p = atof(str_val[0].c_str());
+    // 这两个历史关键词此前接受但不参与计算，暂保留兼容并明确提示。
+    for(const auto& key : {"dft_solver_exe", "hybrid_xc_coeff"}) {
+      recognized.insert(key);
+      if(input_entries.count(key)) GLV::ofs_running << "Warning: " << key << " is ignored" << std::endl;
     }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch (const bool not_given){
-      this->hyf_dc_shift_p = 0.0;
-    }
-    GLV::ofs_running << "hyf_dc_shift_p  " << std::setprecision(6) << this->hyf_dc_shift_p << " eV" << std::endl;
+    for(const auto& entry : input_entries)
+      if(!recognized.count(entry.first)) fail(entry.first, "unsupported keyword");
 
-    //restart
-    try {
-      std::vector<std::string> str_val;
-      this->read_parameter("restart", str_val, 4);
-      
-      this->start_charge_step = atoi(str_val[0].c_str());
-      if(this->start_charge_step<1){
-        std::cerr << "The starting charge step must be greater than 0." << std::endl;
-        std::exit(EXIT_FAILURE);
-      }
+    // 步骤 3：补齐第 4 类的自动默认值。只处理未显式输入的项，与文件行顺序无关。
+    if(!input_entries.count("dos_window")) params.dos_window = params.projection_window;
+    if(!input_entries.count("dmft_step_first")) params.dmft_step_first = params.max_dmft_step;
 
-      this->start_DMFT_step = atoi(str_val[1].c_str());
-      if(this->start_DMFT_step<1){
-        std::cerr << "The starting DMFT step must be greater than 0." << std::endl;
-        std::exit(EXIT_FAILURE);
-      }
-
-      this->last_charge_step = atoi(str_val[2].c_str());
-      if(this->last_charge_step<1){
-        std::cerr << "The last charge step must be greater than 0." << std::endl;
-        std::exit(EXIT_FAILURE);
-      }
-
-      this->last_DMFT_step = atoi(str_val[3].c_str());
-      if(this->last_DMFT_step<1){
-        std::cerr << "The last DMFT step must be greater than 0." << std::endl;
-        std::exit(EXIT_FAILURE);
-      }
-
-      if(this->start_DMFT_step>1 || this->start_charge_step>1)
-        this->flag_restart = true;
-      else
-        this->flag_restart = false;
-    }
-    catch (const std::string messg) {
-      std::cerr << messg << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    catch(const bool not_given){
-      this->start_charge_step = 1;
-      this->start_DMFT_step = 1;
-      this->last_charge_step = 1;
-      this->last_DMFT_step = 1;
-      this->flag_restart = false;
+    // 步骤 4：检查第 1 类的必填条件，以及第 2、4 类的取值和组合约束。
+    if(params.double_counting == "nominal" && !input_entries.count("nf"))
+      fail("nf", "required when double_counting is nominal; specify the nominal occupation explicitly");
+    // 后端和求解器限制沿用原实现，不增加新的物理参数范围约束。
+    #ifndef __FHIaims
+      if(params.dft_solver == "aims") fail("dft_solver", "FHI-aims support is not compiled in");
+    #endif
+    #ifndef __ABACUS
+      if(params.dft_solver == "abacus") fail("dft_solver", "ABACUS support is not compiled in");
+    #endif
+    if(params.impurity_solver == "alps-cthyb" || params.impurity_solver == "alps-cthyb-segment")
+      fail("impurity_solver", "ALPS solvers are unsupported now");
+    if(params.temperature <= 0.0) fail("temperature", "must be positive");
+    if(params.dos_window[0] > params.projection_window[0] || params.dos_window[1] < params.projection_window[1])
+      fail("dos_window", "must contain projection_window");
+    if(params.projector == "cwf" && (!(params.cwf_ep0 < params.cwf_ep1) || !(params.cwf_t > 0.0)))
+      fail("projector", "CWF requires cwf_ep0 < cwf_ep1 and cwf_t > 0 (eV)");
+    if(!(params.projection_min_weight > 0.0 && params.projection_min_weight <= 1.0))
+      fail("projection_min_weight", "must be in (0,1]");
+    if(params.interaction_type != "density_density" &&
+       params.impurity_solver != "rutgers-cthyb" && params.impurity_solver != "comctqmc")
+      fail("interaction_type", "general interactions require rutgers-cthyb or comctqmc");
+    if(params.impurity_solver == "comctqmc") {
+      if(params.comctqmc_nproc < 0) fail("comctqmc_nproc", "must be non-negative");
+      if(params.warmup < 0) fail("warmup", "must be non-negative");
+      if(params.mc_step <= 0) fail("mc_step", "must be positive");
     }
 
-    GLV::ofs_running << "restart  " 
-            << this->start_charge_step << " "
-            << this->start_DMFT_step << " "
-            << this->last_charge_step << " "
-            << this->last_DMFT_step << std::endl;
+    // 步骤 5：计算第 3 类纯派生量。温度用 K，beta 用 Hartree^-1。
+    // 网格保持先截断、奇数再加一；转换前检查范围，避免整数溢出。
+    params.beta = GLC::Hartree_to_eV/(params.temperature*GLC::K_BOLTZMAN_EV);
+    const double tau_points = 25/(params.temperature*GLC::K_BOLTZMAN_EV);
+    const double omega_points = 100/(GLC::PI*params.temperature*GLC::K_BOLTZMAN_EV);
+    const int max_points = std::numeric_limits<int>::max() - 1;
+    if(!std::isfinite(params.beta) || !std::isfinite(tau_points) || !std::isfinite(omega_points) ||
+       tau_points > max_points || omega_points > max_points)
+      fail("temperature", "derived imaginary-time/frequency grid exceeds integer range");
+    params.n_tau = static_cast<int>(tau_points);
+    params.n_omega = static_cast<int>(omega_points);
+    if(params.n_tau % 2 == 1) ++params.n_tau;  // n_tau+1 为奇数，满足 Simpson 积分的网格约定。
+    if(params.n_omega % 2 == 1) ++params.n_omega;
+    params.flag_restart = params.start_charge_step > 1 || params.start_DMFT_step > 1;
 
-    GLV::ofs_running << "===============================================================\n" << std::endl;
-
+    // 步骤 6：统一输出最终参数。保持原有关键词和值，原始 DMFT.in 不被覆盖。
+    // 依赖 DFT 输出的量仍由后续初始化计算；运行步数仍由求解模块维护。
+    GLV::ofs_running << "=========== All parameters used in the running time ===========\n"
+      << std::setprecision(12)
+      << "calculation  " << params.calculation << '\n'
+      << "dft_solver  " << params.dft_solver << '\n'
+      << "temperature  " << params.temperature << '\n'
+      << "magnetism  " << params.magnetism << '\n'
+      << "impurity_solver  " << params.impurity_solver << '\n'
+      << "interaction_type  " << params.interaction_type << '\n'
+      << "double_counting  " << params.double_counting << '\n';
+    if(params.double_counting == "nominal") GLV::ofs_running << "nf  " << params.nf << '\n';
+    GLV::ofs_running
+      << "projection_window  " << params.projection_window[0] << "  " << params.projection_window[1] << '\n'
+      << "dos_window  " << params.dos_window[0] << "  " << params.dos_window[1] << '\n'
+      << "max_charge_step  " << params.max_charge_step << '\n'
+      << "max_dmft_step  " << params.max_dmft_step << '\n'
+      << "dmft_step_first  " << params.dmft_step_first << '\n'
+      << "max_dft_step  " << params.max_dft_step << '\n'
+      << "delta_sigma  " << params.delta_sigma << '\n'
+      << "delta_rho  " << params.delta_rho << '\n'
+      << "mixing_step  " << params.mixing_step << '\n'
+      << "charge_mix_param  " << params.charge_mix_param << '\n'
+      << "mc_step  " << params.mc_step << '\n';
+    if(params.impurity_solver == "comctqmc") GLV::ofs_running
+      << "comctqmc_nproc  " << params.comctqmc_nproc << '\n'
+      << "warmup  " << params.warmup << '\n'
+      << "comctqmc_exe  " << params.comctqmc_exe << '\n'
+      << "comctqmc_evalsim  " << params.comctqmc_evalsim << '\n'
+      << "comctqmc_launcher  " << params.comctqmc_launcher << '\n';
+    GLV::ofs_running
+      << "local_symmetry  " << params.local_symmetry << '\n'
+      << "projector  " << params.projector << '\n'
+      << "projection_min_weight  " << params.projection_min_weight << '\n';
+    if(params.projector == "cwf") GLV::ofs_running
+      << "cwf_ep0  " << params.cwf_ep0 << " eV relative to E_F\n"
+      << "cwf_ep1  " << params.cwf_ep1 << " eV relative to E_F\n"
+      << "cwf_t  " << params.cwf_t << " eV\n";
+    GLV::ofs_running
+      << "hyf_xc_alpha  " << params.hyf_xc_alpha << '\n'
+      << "hyf_dc_mode  " << (params.flag_hyf_dc_mode == 1 ? "jacob" : "jacob_dp") << '\n'
+      << "hyf_dc_shift_d  " << params.hyf_dc_shift_d << " eV\n"
+      << "hyf_dc_shift_p  " << params.hyf_dc_shift_p << " eV\n"
+      << "restart  " << params.start_charge_step << " " << params.start_DMFT_step << " "
+      << params.last_charge_step << " " << params.last_DMFT_step << '\n'
+      << "===============================================================\n" << std::endl;
     return true;
-  }
-  
-  bool input_info::read_parameter(char* keyword, std::vector<std::string>& val, int count)
-  {
-    debug::codestamp("input_info::read_parameter");
-
-    bool not_given=true;
-    char word[200];
-
-    std::ifstream ifs("DMFT.in", std::ios::in);
-
-    if(!ifs)
-    {
-      std::cerr << "Fail to oepn file DMFT.in" << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-
-    ifs.seekg(0);   //set the position at the beginning of the file
-
-    while(ifs.good())
-    {
-      ifs.getline(word, 200);   
-      if(ifs.eof()) break;
-
-      std::string line(word);
-
-      if(!line.empty())
-      {
-        line.erase(0, line.find_first_not_of(" "));
-        line.erase(line.find_last_not_of(" ") + 1);
-      }
-
-      if(!line.empty() && line[0]!='#')
-      {
-        
-        if(line.find_first_of('#') != std::string::npos) line.erase(line.find_first_of('#'));
-
-        std::vector<std::string> key_val;
-        while(!line.empty())
-        {
-          key_val.push_back(line.substr(0,line.find_first_of(' ')));
-          line.erase(0,line.find_first_of(' '));
-          line.erase(0,line.find_first_not_of(' '));
-        }
-
-        std::string key_str_lower = DMFT::input_info::strtolower(key_val[0]);
-
-        if(std::strcmp(key_str_lower.c_str(), keyword)==0)
-        {
-          if(key_val.size() != count+1){
-            std::string messg(word);
-            throw messg;
-          }
-
-          for(int i=0; i<count; i++)
-            val.push_back(key_val[i+1]);
-          
-          not_given=false;
-          break;
-        }
-        else if(
-          std::strcmp("calculation", key_str_lower.c_str())==0 || 
-          std::strcmp("dft_solver", key_str_lower.c_str())==0 || 
-          std::strcmp("dft_solver_exe", key_str_lower.c_str())==0 ||
-          std::strcmp("temperature", key_str_lower.c_str())==0 ||
-          std::strcmp("magnetism", key_str_lower.c_str())==0 ||
-          std::strcmp("impurity_solver", key_str_lower.c_str())==0 ||
-          std::strcmp("interaction_type", key_str_lower.c_str())==0 ||
-          key_str_lower=="comctqmc_nproc" ||
-          key_str_lower=="warmup" ||
-          key_str_lower=="comctqmc_exe" ||
-          key_str_lower=="comctqmc_evalsim" ||
-          key_str_lower=="comctqmc_launcher" ||
-          std::strcmp("double_counting", key_str_lower.c_str())==0 ||
-          std::strcmp("max_charge_step", key_str_lower.c_str())==0 ||
-          std::strcmp("max_dmft_step", key_str_lower.c_str())==0 ||
-          std::strcmp("max_dft_step", key_str_lower.c_str())==0 ||
-          std::strcmp("mc_step", key_str_lower.c_str())==0 || 
-          std::strcmp("projection_window", key_str_lower.c_str())==0 ||
-          std::strcmp("dos_window", key_str_lower.c_str())==0 ||
-          std::strcmp("local_symmetry", key_str_lower.c_str())==0 ||
-          std::strcmp("restart", key_str_lower.c_str())==0 ||
-          std::strcmp("dft_xc", key_str_lower.c_str())==0 ||
-          std::strcmp("charge_mix_param", key_str_lower.c_str())==0 ||
-          std::strcmp("delta_sigma", key_str_lower.c_str())==0 ||
-          std::strcmp("delta_rho", key_str_lower.c_str())==0 ||
-          std::strcmp("mixing_step", key_str_lower.c_str())==0 ||
-          std::strcmp("hybrid_xc_coeff", key_str_lower.c_str())==0 ||
-          std::strcmp("hyf_xc_alpha", key_str_lower.c_str())==0 ||
-          std::strcmp("hyf_dc_mode", key_str_lower.c_str())==0 ||
-          std::strcmp("hyf_dc_shift_d", key_str_lower.c_str())==0 ||
-          std::strcmp("hyf_dc_shift_p", key_str_lower.c_str())==0 ||
-          std::strcmp("projector", key_str_lower.c_str())==0 ||
-          std::strcmp("projection_min_weight", key_str_lower.c_str())==0 ||
-          std::strcmp("cwf_ep0", key_str_lower.c_str())==0 ||
-          std::strcmp("cwf_ep1", key_str_lower.c_str())==0 ||
-          std::strcmp("cwf_t", key_str_lower.c_str())==0 ||
-          std::strcmp("nf", key_str_lower.c_str())==0 )
-        {;}
-        else
-        {
-          std::string messg = "Unsupported parameter " + key_str_lower;
-          throw messg;
-        }
-      }
-
-      if(ifs.eof()) break;
-    }
-    ifs.close();
-
-    if(not_given) throw not_given;
-
-    return true;
-  }
-
-  std::string input_info::strtolower(char *in_str)
-  {
-    char c;
-    std::string out_str;
-    int len = std::strlen(in_str);
-    for (int i = 0; i < len; i++)
-    {
-      c = in_str[i];
-      out_str.push_back(std::tolower(c));
-    }
-    // out_str.push_back('\0');
-
-    return out_str;
   }
 
   std::string input_info::strtolower(std::string in_str)
   {
-    std::string out_str;
+    // 按值传入，只修改字符串副本；tolower 要求字符先转换为 unsigned char。
+    for(char& c : in_str)
+      c = std::tolower(static_cast<unsigned char>(c));
 
-    for(char c : in_str)
-      out_str.push_back(std::tolower(c));
-
-    // out_str.push_back('\0');
-
-    return out_str;
+    return in_str;
   }
-
-  const void* input_info::parameter(char* keyword)
-  {
-    std::string word = this->strtolower(keyword);
-
-    if(std::strcmp("dft_solver", word.c_str())==0) return &flag_DFT_solver;
-    else if(std::strcmp("dft_solver_exe", word.c_str())==0) return &dft_solver_exe;
-    else if(std::strcmp("calculation", word.c_str())==0) return &calculation_type;
-    else if(std::strcmp("temperature", word.c_str())==0) return &temperature;
-    else if(std::strcmp("beta", word.c_str())==0) return &beta;
-    else if(std::strcmp("magnetism", word.c_str())==0) return &flag_magnetism;
-    else if(std::strcmp("n_tau", word.c_str())==0) return &n_tau;
-    else if(std::strcmp("n_omega", word.c_str())==0) return &n_omega;
-    else if(std::strcmp("impurity_solver", word.c_str())==0) return &flag_impurity_solver;
-    else if(std::strcmp("interaction_type", word.c_str())==0) return &flag_interaction_type;
-    else if(word=="comctqmc_nproc") return &comctqmc_nproc;
-    else if(word=="warmup") return &warmup;
-    else if(word=="comctqmc_exe") return &comctqmc_exe;
-    else if(word=="comctqmc_evalsim") return &comctqmc_evalsim;
-    else if(word=="comctqmc_launcher") return &comctqmc_launcher;
-    else if(std::strcmp("double_counting", word.c_str())==0) return &flag_double_counting;
-    else if(std::strcmp("max_charge_step", word.c_str())==0) return &charge_step_max;
-    else if(std::strcmp("max_dmft_step", word.c_str())==0) return &DMFT_step_max;
-    else if(std::strcmp("max_dft_step", word.c_str())==0) return &DFT_step_max;
-    else if(std::strcmp("mc_step", word.c_str())==0) return &MC_step;
-    else if(std::strcmp("hyb_func", word.c_str())==0) return &hyb_func;
-    else if(std::strcmp("hyf_xc_alpha", word.c_str())==0) return &hyf_xc_alpha;
-    else if(std::strcmp("hyf_dc_shift_d", word.c_str())==0) return &hyf_dc_shift_d;
-    else if(std::strcmp("hyf_dc_shift_p", word.c_str())==0) return &hyf_dc_shift_p;
-    else if(std::strcmp("charge_mix_param", word.c_str())==0) return &charge_mix_param;
-    else if(std::strcmp("delta_sigma", word.c_str())==0) return &delta_sigma;
-    else if(std::strcmp("delta_rho", word.c_str())==0) return &delta_rho;
-    else if(std::strcmp("start_charge_step", word.c_str())==0) return &start_charge_step;
-    else if(std::strcmp("start_dmft_step", word.c_str())==0) return &start_DMFT_step;
-    else if(std::strcmp("last_charge_step", word.c_str())==0) return &last_charge_step;
-    else if(std::strcmp("last_dmft_step", word.c_str())==0) return &last_DMFT_step;
-    else if(std::strcmp("restart", word.c_str())==0) return &flag_restart;
-    else if(std::strcmp("mixing_step", word.c_str())==0) return &mixing_step;
-    else if(std::strcmp("hyf_dc_mode", word.c_str())==0) return &flag_hyf_dc_mode;
-    else if (std::strcmp("cwf_ep0", word.c_str()) == 0) return &cwf_ep0;
-    else if (std::strcmp("cwf_ep1", word.c_str()) == 0) return &cwf_ep1;
-    else if (std::strcmp("cwf_t", word.c_str()) == 0) return &cwf_t;
-    else if (std::strcmp("projector", word.c_str()) == 0) return &flag_projector;
-    else if (std::strcmp("projection_min_weight", word.c_str()) == 0) return &projection_min_weight;
-    else if (std::strcmp("nf", word.c_str()) == 0) return &nf;
-    else
-    {
-      std::cerr << "No parameter " << keyword << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-  }
-
-  void input_info::test()
-  {
-    if(this->flag_magnetism==-1)
-    {
-      std::cerr << "Please set the parameter of magnetism" << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-  }
-
-  void input_info::out()
-  {
-    debug::codestamp("input_info::out");
-
-    std::string file;
-    file="DMFT.in";
-    std::ofstream ofs(file.c_str(),std::ios::out);
-    if(!ofs)
-    {
-      std::cerr << "Fail to oepn " << file.c_str() << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-
-    ofs << "DFT_solver" << std::setw(5) << this->flag_DFT_solver << '\n';
-    ofs << "temperature" << std::setw(10) << std::setprecision(2) << this->temperature << '\n';
-    ofs << "magnetism" << std::setw(5) << this->flag_magnetism << '\n';
-    ofs << "impurity_solver" << std::setw(5) << this->flag_impurity_solver << '\n';
-    ofs << "interaction_type" << std::setw(5) << this->flag_interaction_type << '\n';
-    ofs << "n_tau" << std::setw(5) << this->n_tau << '\n';
-    ofs << "n_omega" << std::setw(5) << this->n_omega << '\n';
-    ofs << "double_counting" << std::setw(5) << this->flag_double_counting << std::endl;
-
-    ofs.close();
-  }
-
 }
+
+// Parameter metadata and logging can later share a lightweight definition table.

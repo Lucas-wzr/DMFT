@@ -10,6 +10,7 @@
 #include <Eigen/Core>
 #include <complex>
 #include <vector>
+#include <string>
 
 namespace DFT_plus_DMFT
 {
@@ -48,7 +49,7 @@ namespace DFT_plus_DMFT
          DMFT::self_energy& sigma,
          DFT_output::atoms_info& atom,
          DFT_plus_DMFT::projector& proj,
-         const double beta, const int mag, const double mu);
+         const double beta, const std::string& mag, const double mu);
 
     void evaluate_mu_bisection_imag_DFT(
          DFT_output::KS_bands& band, 
@@ -81,7 +82,7 @@ double evaluate_electrons_number_imag_fit(
     DMFT::self_energy& sigma,
     DFT_output::atoms_info& atom,
     DFT_plus_DMFT::projector& proj,
-    const double beta, const int mag, const double mu,
+    const double beta, const std::string& mag, const double mu,
     int n_tail_fit);
 
     

@@ -14,7 +14,7 @@ namespace DFT_output
   {
     public:
     overlap_matrix(){};
-    overlap_matrix(const int DFT_solver, const std::string dir);
+    overlap_matrix(const std::string& DFT_solver, const std::string dir);
 
     ~overlap_matrix(){};
 
@@ -34,7 +34,7 @@ namespace DFT_output
     DFT_plus_DMFT::Matrix& overlap_localorb();
 
     private:
-    int flag_DFT_solver;          //1:aims, 2:ABACUS
+    std::string dft_solver;
 
   };
 }

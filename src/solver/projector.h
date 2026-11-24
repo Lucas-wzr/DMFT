@@ -8,6 +8,7 @@
 #include "../matrix_types.h"
 
 #include <complex>
+#include <string>
 #include <vector>
 
 
@@ -22,15 +23,15 @@ namespace DFT_plus_DMFT
     ~projector(){};
 
     void evaluate_projector(
-        const int projector_type,
-        const int DFT_solver,
+        const std::string& projector_type,
+        const std::string& DFT_solver,
         DFT_output::KS_bands& band,
         DFT_plus_DMFT::Hilbert_space& space,
         DFT_output::atoms_info& atom,
         const double CWF_ep0,
         const double CWF_ep1,
         const double CWF_T,
-        const double projection_min_weight = 0.9);
+        const double projection_min_weight = 0.3);
 
     void evalute_projector_k(
           DFT_output::overlap_matrix& ovlp,

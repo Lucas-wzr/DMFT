@@ -15,6 +15,7 @@
 #include "Hilbert_space.h"
 #include "coulomb_tensor.h"
 
+#include <string>
 #include <vector>
 #include <complex>
 
@@ -50,10 +51,10 @@ namespace DMFT
           DFT_plus_DMFT::Hilbert_space& space,
           const double mu,
           const int nomega,
-          const int mag);
+          const std::string& mag);
 
     void evaluate_delta_Weiss_tau(
-          const int impurity_solver,
+          const std::string& impurity_solver,
           DFT_output::atoms_info& atom,
           const int nspin,
           const double beta,
@@ -67,18 +68,18 @@ namespace DMFT
           DFT_output::atoms_info& atom,
           DFT_plus_DMFT::Hilbert_space& space,
           const int nomega,
-          const int mag);
+          const std::string& mag);
 
     void read_self_energy(
           const bool restart,
           const int char_step,
           const int DMFT_step,
-          const int impurity_solver, 
+          const std::string& impurity_solver,
           DFT_output::KS_bands& band,
           DMFT::input_info& in, 
           DFT_output::atoms_info& atom );
     
-    bool scf_condition(const int impurity_solver, 
+    bool scf_condition(const int flag_axis,
                       DFT_output::KS_bands& band,
                       DFT_output::atoms_info& atom,
                       DMFT::input_info& in);
@@ -89,7 +90,7 @@ namespace DMFT
 
     void out(const int char_step,
             const int DMFT_step,
-            const int impurity_solver, 
+            const std::string& impurity_solver,
             const double mu, DFT_output::KS_bands& band,
             DMFT::input_info& in, DFT_output::atoms_info& atom,
             DMFT::coulomb_tensor& Umat);
@@ -107,7 +108,7 @@ namespace DMFT
         Weiss(){return Weiss_omega;}
 
     std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>&
-        hybdization_tau(const int impurity_solver);
+        hybdization_tau(const std::string& impurity_solver);
 
     public: //static member function
 

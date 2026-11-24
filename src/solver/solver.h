@@ -10,6 +10,8 @@
 #include "charge_scf.h"
 #include "charge_scf_abacus.h"
 
+#include <string>
+
 namespace DFT_plus_DMFT
 {
   class solver
@@ -40,7 +42,7 @@ namespace DFT_plus_DMFT
         const int DMFT_step);
 
     void impurity_solving(
-        const int impurity_solver,
+        const std::string& impurity_solver,
         const int char_step,
         const int DMFT_step,
         DFT_output::atoms_info& atom );
@@ -60,7 +62,7 @@ namespace DFT_plus_DMFT
     bool DFT_loop_charge_mixing(
         const int mix_step );
 
-    void run_nscf_dft(const int dft_solver);
+    void run_nscf_dft(const std::string& dft_solver);
 
     public:  
     void set_ios(std::ofstream& ofs_running);
@@ -68,8 +70,6 @@ namespace DFT_plus_DMFT
 
     private:
     int flag_axis;                     //Do calculations on imaginary (0) or real (1) axis
-    int calculation_type;              //DFT+DMFT scf:0; spectra:1; default:0
-
   };
 }
 

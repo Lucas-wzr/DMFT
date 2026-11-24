@@ -37,7 +37,7 @@ namespace
 namespace DMFT
 {
   void double_counting::cal_double_counting(
-      const int type, const bool SOC, const int nspin, 
+      const std::string& type, const bool SOC, const int nspin,
       DFT_output::atoms_info& atom,
       DMFT::input_info& in,
       const bool hybrid_func,
@@ -51,7 +51,7 @@ namespace DMFT
 
     std::vector<std::vector<std::vector<double>>> local_occ = atom.occ_num_m();
 
-    if(type==1)
+    if(type == "fll")
     {
       GLV::ofs_running << "\n=============Double counting(FLL)============" << std::endl;
 
@@ -74,7 +74,7 @@ namespace DMFT
         //                       (atom.Uval(iatom)-3.0*atom.Jval(iatom))*(m_tot-1.0))/(2*m_tot-1.0);
 
         double averJ = atom.Jval(iatom);
-        if(*(int*)in.parameter("interaction_type") == 3)
+        if(in.get().interaction_type == "slater_condon")
         {
           const auto parameters = slater_dc_parameters(ineq,atom);
           averU = parameters[0];
@@ -109,8 +109,8 @@ namespace DMFT
               // Keep the Jacob-like alpha-scaled local term as the base part,
               // then add shell-resolved diagonal offsets for d and p shells to tune p-d alignment.
               const int angular_L = atom.L(iatom);
-              const double shift_d_ev = *(double*)in.parameter("hyf_dc_shift_d");
-              const double shift_p_ev = *(double*)in.parameter("hyf_dc_shift_p");
+              const double shift_d_ev = in.get().hyf_dc_shift_d;
+              const double shift_p_ev = in.get().hyf_dc_shift_p;
               double shell_shift_ev = 0.0;
 
               if(angular_L==2) shell_shift_ev = shift_d_ev;
@@ -147,7 +147,7 @@ namespace DMFT
              GLC::Hartree_to_eV*this->V_dc[ineq][is][m*m_tot+m].real();
 
          GLV::ofs_running << std::endl;
-         if(*(int*)in.parameter("interaction_type") == 3)
+         if(in.get().interaction_type == "slater_condon")
            GLV::ofs_running << "DC parameters: U_DC=" << averU*GLC::Hartree_to_eV
              << " eV J_DC=" << averJ*GLC::Hartree_to_eV << " eV N_DC="
              << atom.occ_num(iatom,0)+atom.occ_num(iatom,1)
@@ -190,14 +190,14 @@ namespace DMFT
         }
       }//ineq
       */
-    }//type==1
-    else if(type==2)
+    }//fll
+    else if(type == "nominal")
     {
       GLV::ofs_running << "\n=============Double counting(nominal)============" << std::endl;
 
       if(this->V_dc.empty()) this->V_dc.resize(atom.inequ_atoms());
 
-      const double nominal_nf = *(double*)in.parameter("nf");
+      const double nominal_nf = in.get().nf;
 
       for(int ineq=0; ineq<atom.inequ_atoms(); ineq++)
       {
@@ -211,7 +211,7 @@ namespace DMFT
         double averU = ( atom.Uval(iatom) + (atom.Uval(iatom)-2.0*atom.Jval(iatom))
                               *(Norb-2) )/(Norb-1.0);
         double averJ = atom.Jval(iatom);
-        if(*(int*)in.parameter("interaction_type") == 3)
+        if(in.get().interaction_type == "slater_condon")
         {
           const auto parameters = slater_dc_parameters(ineq,atom);
           averU = parameters[0];
@@ -257,14 +257,14 @@ namespace DMFT
             GLV::ofs_running << std::setw(12) << std::fixed << std::setprecision(6)
                              << GLC::Hartree_to_eV*this->V_dc[ineq][is][m*m_tot+m].real();
           GLV::ofs_running << std::endl;
-          if(*(int*)in.parameter("interaction_type") == 3)
+          if(in.get().interaction_type == "slater_condon")
             GLV::ofs_running << "DC parameters: U_DC=" << averU*GLC::Hartree_to_eV
               << " eV J_DC=" << averJ*GLC::Hartree_to_eV << " eV N_DC="
               << nominal_nf << " N_DC_spin=" << nominal_nf_sigma << '\n';
         }
       }
     }
-    else if(type==3)
+    else if(type == "arbitrary")
     {
       std::cerr << "Arbitrary double counting is not implemented yet" << std::endl;
       std::exit(EXIT_FAILURE);

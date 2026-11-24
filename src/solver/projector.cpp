@@ -25,8 +25,8 @@
 namespace DFT_plus_DMFT
 {
   void projector::evaluate_projector(
-        const int projector_type,
-        const int DFT_solver,
+        const std::string& projector_type,
+        const std::string& DFT_solver,
         DFT_output::KS_bands& band,
         DFT_plus_DMFT::Hilbert_space& space,
         DFT_output::atoms_info& atom,
@@ -95,7 +95,7 @@ namespace DFT_plus_DMFT
           * solver.eigenvectors().adjoint();
     };
 
-    if(projector_type != 1 && projector_type != 2)
+    if(projector_type != "nao" && projector_type != "cwf")
       projector_abort("unsupported projector type", -1, -1, 0);
 
     if(ntasks <= 0 || nspin <= 0 || norb <= 0 || natom <= 0 ||
@@ -129,7 +129,7 @@ namespace DFT_plus_DMFT
     {
       if(wbands[is] <= 0 || wbands[is] > nbands)
         projector_abort("invalid correlated KS-band count", -1, is, 0);
-      if(projector_type == 2 && wbands[is] < norb)
+      if(projector_type == "cwf" && wbands[is] < norb)
         projector_abort("CWF requires wbands >= norb", -1, is, 0);
       if(epsilon[is].size() != static_cast<std::size_t>(nkpoints))
         projector_abort("invalid KS-energy k-point dimension", -1, is, 0);
@@ -138,7 +138,7 @@ namespace DFT_plus_DMFT
           projector_abort("invalid KS-energy band dimension", ik, is, 0);
     }
 
-    if(projector_type == 2 &&
+    if(projector_type == "cwf" &&
        (!std::isfinite(CWF_ep0) || !std::isfinite(CWF_ep1) ||
         !std::isfinite(CWF_T) || !(CWF_ep0 < CWF_ep1) || !(CWF_T > 0.0)))
       projector_abort("invalid CWF parameters", -1, -1, 0);
@@ -181,7 +181,7 @@ namespace DFT_plus_DMFT
     Matrix proj_mat_tmp, mat_tmp;
     Matrix norm_orth(norb, norb);
     Matrix sqrt_inver(norb, norb);
-    std::vector<double> window_weight(projector_type == 2 ? wbands_max : 0);
+    std::vector<double> window_weight(projector_type == "cwf" ? wbands_max : 0);
 
     double cwf_energy_min_local = std::numeric_limits<double>::infinity();
     double cwf_energy_max_local = -std::numeric_limits<double>::infinity();
@@ -251,7 +251,7 @@ namespace DFT_plus_DMFT
     };
 
     if(myid == 0)
-      GLV::ofs_running << (projector_type == 2
+      GLV::ofs_running << (projector_type == "cwf"
           ? "\n=============Projector(CWF)============"
           : "\n=============Projector(default)============") << std::endl;
 
@@ -332,7 +332,7 @@ namespace DFT_plus_DMFT
 
         if(!check_window_overlap(i_k_point,is)) continue;
 
-        if(projector_type == 1)
+        if(projector_type == "nao")
         {
           norm_orth = mat_tmp.adjoint() * mat_tmp;
           hermitian_sqrt_inverse(
@@ -507,7 +507,7 @@ namespace DFT_plus_DMFT
           for(int m=0; m<m_tot; m++)
             this->TB_Hk[ik][iatom][is][m] = H(m,m);
 
-          if(projector_type == 2)
+          if(projector_type == "cwf")
           {
             double hermiticity_error = 0.0;
             for(int m1=0; m1<m_tot; m1++)
@@ -538,7 +538,7 @@ namespace DFT_plus_DMFT
     // k point when more MPI tasks than k points are requested.
     MPI_Bcast(&this->n_basis, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-    if(projector_type == 2)
+    if(projector_type == "cwf")
     {
       double cwf_energy_min = 0.0;
       double cwf_energy_max = 0.0;

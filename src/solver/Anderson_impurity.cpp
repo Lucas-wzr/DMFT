@@ -127,7 +127,7 @@ namespace DMFT
         DFT_plus_DMFT::Hilbert_space& space,
         const double mu,
         const int nomega,
-        const int mag )
+        const std::string& mag )
   {
     debug::codestamp("impurity::evaluate_hybridization_function");
 
@@ -386,7 +386,7 @@ namespace DMFT
   }
 
   void impurity::evaluate_delta_Weiss_tau(
-                  const int impurity_solver,
+                  const std::string& impurity_solver,
                   DFT_output::atoms_info& atom,
                   const int nspin,
                   const double beta,
@@ -559,41 +559,45 @@ namespace DMFT
 
   void impurity::out(const int char_step,
                     const int DMFT_step,
-                    const int impurity_solver,
+                    const std::string& impurity_solver,
                     const double mu, 
                     DFT_output::KS_bands& band,
                     DMFT::input_info& in, 
                     DFT_output::atoms_info& atom,
                     DMFT::coulomb_tensor& Umat )
   {
-    switch(impurity_solver)
+    if(impurity_solver == "alps-cthyb")
     {
-      case 1:
         this->ALPS_hyb.output(char_step, DMFT_step, 
                mu, in, atom, band, this->impurity_level, 
                this->sigma.sigma_new(0), this->Weiss_omega, this->hyb_omega);
-        break;
-      case 2:
+    }
+    else if(impurity_solver == "alps-cthyb-segment")
+    {
         this->ALPS_hyb_segment.output(char_step, DMFT_step,
                mu, in, atom, band, this->impurity_level, 
                this->sigma.sigma_new(0), this->Weiss_omega);
-        break;
-      case 3:
+    }
+    else if(impurity_solver == "pacs")
+    {
         this->pacs.output(char_step, DMFT_step, 
                mu, in, atom, band, this->sigma.sigma_imag.Matsubara_freq(), 
                this->impurity_level, this->hyb_omega );
-        break;
-      case 4:
+    }
+    else if(impurity_solver == "rutgers-cthyb")
+    {
         this->Rutgers.output(char_step, DMFT_step, 
               mu, in, atom, band, this->sigma.sigma_imag.Matsubara_freq(), 
               this->impurity_level, this->hyb_omega, Umat );
-        break;
-      case 5: 
+    }
+    else if(impurity_solver == "iqist")
+    {
         this->iQIST_narcissus.output(char_step, DMFT_step, 
               mu, in, atom, band, this->sigma.sigma_imag.Matsubara_freq(), 
               this->impurity_level, this->hyb_omega, Umat );
-        break;
-      case 6:
+    }
+    else if(impurity_solver == "comctqmc")
+    {
         try {
           this->comctqmc.output(char_step, DMFT_step, mu, in, atom, band,
                 this->impurity_level, this->hyb_omega, Umat);
@@ -602,8 +606,9 @@ namespace DMFT
           std::cerr << "ComCTQMC input: " << error.what() << std::endl;
           MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
         }
-        break;
-      default:
+    }
+    else
+    {
         std::cerr << "Not supported impurity solver" << std::endl;
         std::exit(EXIT_FAILURE);
     }
@@ -614,7 +619,7 @@ namespace DMFT
         const bool restart,
         const int char_step,
         const int DMFT_step,
-        const int impurity_solver, 
+        const std::string& impurity_solver,
         DFT_output::KS_bands& band,
         DMFT::input_info& in, 
         DFT_output::atoms_info& atom)
@@ -626,12 +631,12 @@ namespace DMFT
 
     int axis_flag;
 
-    if(impurity_solver==1 || 
-       impurity_solver==2 || 
-       impurity_solver==3 ||
-       impurity_solver==4 ||
-       impurity_solver==5 ||
-       impurity_solver==6 )
+    if(impurity_solver == "alps-cthyb" ||
+       impurity_solver == "alps-cthyb-segment" ||
+       impurity_solver == "pacs" ||
+       impurity_solver == "rutgers-cthyb" ||
+       impurity_solver == "iqist" ||
+       impurity_solver == "comctqmc")
        axis_flag = 0;       //imaginary axis
     else axis_flag = 1;     //real axis
 
@@ -688,40 +693,45 @@ namespace DMFT
       }//ineq
     }
 
-    switch(impurity_solver)
+    if(impurity_solver == "alps-cthyb")
     {
-      case 1:
         // this->ALPS_hyb.read_last_step(
         //         char_step, DMFT_step, 
         //         band, in, atom,
         //         this->Green_fun_omega, 
         //         this->Weiss_omega, 
         //         this->Green_fun_omega_save );
-        break;
-      case 2:
+    }
+    else if(impurity_solver == "alps-cthyb-segment")
+    {
         // this->ALPS_hyb_segment.read_last_step(istep, band, in, atom, this->hyb_omega,
         //                     this->Green_fun_omega, this->Green_fun_omega_save);
-        break;
-      case 3:
+    }
+    else if(impurity_solver == "pacs")
+    {
         this->pacs.read_self_energy(
                 char_step, DMFT_step,
                 band, in, atom, sigma_new);
-        break;
-      case 4:
+    }
+    else if(impurity_solver == "rutgers-cthyb")
+    {
         this->Rutgers.read_self_energy(
                 char_step, DMFT_step,
                 band, in, atom, sigma_new);
-        break;
-      case 5:
+    }
+    else if(impurity_solver == "iqist")
+    {
         this->iQIST_narcissus.read_self_energy(
                 char_step, DMFT_step,
                 band, in, atom, sigma_new);
-        break;
-      case 6:
+    }
+    else if(impurity_solver == "comctqmc")
+    {
         this->comctqmc.read_self_energy(char_step, DMFT_step, band, in, atom,
                 sigma_new);
-        break;
-      default:
+    }
+    else
+    {
         std::cerr << "Not supported impurity solver" << std::endl;
         std::exit(EXIT_FAILURE);
     }
@@ -790,8 +800,8 @@ namespace DMFT
     const int ineq_num = atom.inequ_atoms();
     const std::vector<int>& norb_sub = atom.iatom_norb();
     const int nspin = band.nspins();
-    const int nomega = *(int*)in.parameter("n_omega");
-    const double sc_criteria = *(double*)in.parameter("delta_sigma");
+    const int nomega = in.get().n_omega;
+    const double sc_criteria = in.get().delta_sigma;
 
     std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>&
         sigma_new = this->sigma.sigma_new(flag_axis);
@@ -843,7 +853,6 @@ namespace DMFT
       }
     }
 
-    //const double alpha = *(double*)in.parameter("sigma_mix");
     double alpha = 0.2;
     if(!this->alpha_initialized){
       alpha = 1.0;   
@@ -873,13 +882,13 @@ namespace DMFT
   {
     debug::codestamp("impurity::update_self_energy");
 
-    const double beta = *(double*)in.parameter("beta");
+    const double beta = in.get().beta;
     const std::complex<double> im = std::complex<double>(0.0,1.0);
 
     const int ineq_num = atom.inequ_atoms();
     const std::vector<int>& norb_sub = atom.iatom_norb();
     const int nspin = band.nspins();
-    const int nomega = *(int*)in.parameter("n_omega"); 
+    const int nomega = in.get().n_omega;
 
     std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>&
         sigma_new = this->sigma.sigma_imag.sigma_new_access();
@@ -917,7 +926,7 @@ namespace DMFT
                 DFT_output::atoms_info& atom,
                 DFT_plus_DMFT::Hilbert_space& space,
                 const int nomega,
-                const int mag )
+                const std::string& mag )
   {
     debug::codestamp("impurity::evaluate_local_occupation");
 
@@ -927,7 +936,7 @@ namespace DMFT
     const std::vector<int>& wbands = space.Wbands();
     const int nprocs = mpi_ntasks();
     const int myid = mpi_rank();
-    const double beta= *(double*)in.parameter("beta");
+    const double beta= in.get().beta;
     const std::vector<int>& sub_norb = atom.iatom_norb();
     const std::vector<std::vector<int>>& orb_index = atom.Im2iorb();
     const int norb = atom.norb();
@@ -1028,7 +1037,7 @@ namespace DMFT
         {
           int symm=0;       //symmetry
 
-          if(mag==1 && atom.magnetic(iatom)*atom.magnetic(iatom1)==-1) symm=1;  //anti_symmetry;AFM
+          if(mag == "afm" && atom.magnetic(iatom)*atom.magnetic(iatom1)==-1) symm=1;  //anti_symmetry;AFM
 
           for(int ispin=0; ispin<2; ispin++)
             for(int m=0; m<m_tot; m++)
@@ -1112,7 +1121,7 @@ namespace DMFT
         {
           int symm=0;       //symmetry
 
-          if(mag==1 && atom.magnetic(iatom)*atom.magnetic(iatom1)==-1) symm=1;  //anti_symmetry;AFM
+          if(mag == "afm" && atom.magnetic(iatom)*atom.magnetic(iatom1)==-1) symm=1;  //anti_symmetry;AFM
 
           for(int ispin=0; ispin<2; ispin++)
             for(int m=0; m<m_tot; m++)
@@ -1227,7 +1236,7 @@ namespace DMFT
         {
           int symm=0;       //symmetry
 
-          if(mag==1 && atom.magnetic(iatom)*atom.magnetic(iatom1)==-1) symm=1;  //anti_symmetry;AFM
+          if(mag == "afm" && atom.magnetic(iatom)*atom.magnetic(iatom1)==-1) symm=1;  //anti_symmetry;AFM
 
           for(int ispin=0; ispin<2; ispin++)
             for(int m=0; m<m_tot; m++)
@@ -1257,29 +1266,20 @@ namespace DMFT
   }
 
   std::vector<std::vector<std::vector<DFT_plus_DMFT::Matrix>>>&
-      impurity::hybdization_tau(const int impurity_solver)
+      impurity::hybdization_tau(const std::string& impurity_solver)
   {
-    switch(impurity_solver)
-    {
-      case 1: //ALPS_CTHYB
+    if(impurity_solver == "alps-cthyb")
         return this->ALPS_hyb.hybridization_func_tau();
-        break;
-      case 2: //
+    if(impurity_solver == "alps-cthyb-segment")
         return this->ALPS_hyb_segment.hybridization_func_tau();
-        break;
-      case 3: //pacs
+    if(impurity_solver == "pacs")
         return this->pacs.hybridization_func_tau();
-        break;
-      case 4: //Rutgers
+    if(impurity_solver == "rutgers-cthyb")
         return this->Rutgers.hybridization_func_tau();
-        break;
-      case 5:  //iQIST
+    if(impurity_solver == "iqist")
         return this->iQIST_narcissus.hybridization_func_tau();
-        break;
-      default:
-        std::cerr << "Not supported impurity solver" << std::endl;
-        std::exit(EXIT_FAILURE);
-    }
+    std::cerr << "Not supported impurity solver" << std::endl;
+    std::exit(EXIT_FAILURE);
   }
 
   void impurity::Fourier_trans_omega_tau(
