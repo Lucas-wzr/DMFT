@@ -15,13 +15,13 @@
 namespace DMFT
 {
   void coulomb_tensor::update_coulomb_tensor(
-    const int type, DFT_output::atoms_info& atom)
+    const std::string& type, DFT_output::atoms_info& atom)
   {
     try
     {
-      if(type==1 || type==2)
+      if(type == "density_density" || type == "kanamori")
       {
-        Kanamori_para().evaluate_coulomb_tensor(atom, this->U_matrix, type==2);
+        Kanamori_para().evaluate_coulomb_tensor(atom, this->U_matrix, type == "kanamori");
         return;
       }
       this->U_matrix.resize(atom.inequ_atoms());
@@ -29,14 +29,14 @@ namespace DMFT
       {
         const int iatom = atom.ineq_iatom(ineq);
         const int M = atom.iatom_norb()[iatom];
-        if(type==4)
+        if(type == "tensor")
         {
           const std::string file = "Uijkl_impurity" + std::to_string(ineq) + ".dat";
           std::ifstream input(file.c_str());
           if(!input) throw std::runtime_error("Cannot open " + file);
           this->U_matrix[ineq] = rutgers_atomic::read_tensor(input, M, GLC::Hartree_to_eV);
         }
-        else if(type==3)
+        else if(type == "slater_condon")
         {
           const std::string file = "Slater_integrals_impurity" + std::to_string(ineq) + ".dat";
           std::ifstream input(file.c_str());
@@ -61,23 +61,19 @@ namespace DMFT
   }
 
   void coulomb_tensor::out_coulomb_tensor(
-            const int type,
+            const std::string& type,
             const int char_step,
             const int DMFT_step,
-            const int impurity_solver, 
+            const std::string& impurity_solver,
             DFT_output::atoms_info& atom,
             DFT_output::KS_bands& band)
   {
-    switch(type)
+    if(type == "density_density")
     {
-      case 1:
-        if(impurity_solver==1)
-          Kanamori_para().out_ALPS_CTHYB(char_step, DMFT_step, atom, band);
-        else if(impurity_solver==2)
-          Kanamori_para().out_ALPS_CTHYB_SEGMENT(char_step, DMFT_step, atom, band);
-        break;
-      default:
-        break;
+      if(impurity_solver == "alps-cthyb")
+        Kanamori_para().out_ALPS_CTHYB(char_step, DMFT_step, atom, band);
+      else if(impurity_solver == "alps-cthyb-segment")
+        Kanamori_para().out_ALPS_CTHYB_SEGMENT(char_step, DMFT_step, atom, band);
     }
   }
   

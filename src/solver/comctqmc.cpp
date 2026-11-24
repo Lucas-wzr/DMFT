@@ -226,7 +226,7 @@ namespace DMFT
     {
         try {
             const int nspin=band.nspins(),N=in.get().n_omega;
-            const int magnetism=in.get().flag_magnetism;
+            const std::string& magnetism=in.get().magnetism;
             const double beta=in.get().beta;
             if(band.soc() || (nspin!=1 && nspin!=2))
                 throw std::runtime_error("ComCTQMC results require collinear spins without SOC");
@@ -240,7 +240,7 @@ namespace DMFT
                     std::vector<std::complex<double>> sd(M);
                     for(int m=0;m<M;m++)
                     {
-                        if(nspin==1 || magnetism==3 || magnetism==4)
+                        if(nspin==1 || magnetism=="para" || magnetism=="none")
                         {
                             sd[m]=(s[m][n]+s[M+m][n])/2.0;
                         }

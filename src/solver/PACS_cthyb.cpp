@@ -271,7 +271,7 @@ namespace DMFT
     const std::vector<int>& norb_sub = atom.iatom_norb();
     const bool soc = band.soc();
     const int nspin = band.nspins();
-    const int magnetism = in.get().flag_magnetism;
+    const std::string& magnetism = in.get().magnetism;
 
     double omega, real, imag;
     std::string str_tmp;
@@ -351,7 +351,7 @@ namespace DMFT
       //   {
       //     for(int m=0; m<m_tot; m++)
       //     {
-      //       if(magnetism==3 || magnetism==4)//none magnetic or paramamagnetic
+      //       if(magnetism=="para" || magnetism=="none")//none magnetic or paramagnetic
       //       {
       //         if(nspin==1) 
       //         {
@@ -481,7 +481,7 @@ namespace DMFT
         {
           for(int m=0; m<m_tot; m++)
           {
-            if(magnetism==3 || magnetism==4) //none magnetic or paramamagnetic
+            if(magnetism == "para" || magnetism == "none") //none magnetic or paramamagnetic
             {
               if(nspin==1) 
               {

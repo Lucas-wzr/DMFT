@@ -21,10 +21,10 @@ namespace DMFT
 
   self_energy::~self_energy(){}
 
-  bool self_energy::read_sigma_save(const int impurity_solver, const bool SOC,
+  bool self_energy::read_sigma_save(const std::string& impurity_solver, const bool SOC,
                     const int nspin, DFT_output::atoms_info& atom)
   {
-    if(impurity_solver==1)
+    if(impurity_solver == "alps-cthyb")
     {
       this->sigma_imag.read_sigma_save(SOC, nspin, atom);
     }
@@ -80,7 +80,7 @@ namespace DMFT
   }
 
   void self_energy::evalute_lattice_sigma(
-        const int axis_flag, const int mag,
+        const int axis_flag, const std::string& mag,
         const int ispin, const std::vector<int>& wbands,
         DFT_output::atoms_info& atom,
         const std::vector<std::vector<Matrix>>& projector,
@@ -107,7 +107,7 @@ namespace DMFT
         {
           int spin = ispin;
           if(a != iatom){
-            const int flip = mag==1 && atom.magnetic(iatom)*atom.magnetic(a)==-1;
+            const int flip = mag == "afm" && atom.magnetic(iatom)*atom.magnetic(a)==-1;
             spin = (ispin+flip)%2;
           }
           const Matrix& P = projector[a][ispin];
@@ -120,7 +120,7 @@ namespace DMFT
   }
 
   void self_energy::evalute_lattice_sigma_infty(
-        const int axis_flag, const int mag,
+        const int axis_flag, const std::string& mag,
         const int ispin, const std::vector<int>& wbands,
         DFT_output::atoms_info& atom,
         const std::vector<std::vector<Matrix>>& projector,
@@ -145,7 +145,7 @@ namespace DMFT
       {
         int spin = ispin;
         if(a != iatom){
-          const int flip = mag==1 && atom.magnetic(iatom)*atom.magnetic(a)==-1;
+          const int flip = mag == "afm" && atom.magnetic(iatom)*atom.magnetic(a)==-1;
           spin = (ispin+flip)%2;
         }
         const Matrix& P = projector[a][ispin];

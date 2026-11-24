@@ -24,7 +24,7 @@ namespace DMFT
     const int ineq_num = atom.inequ_atoms();
     const std::vector<int>& norb_sub = atom.iatom_norb();
     const int nspin = band.nspins();
-    const int magnetism = in.get().flag_magnetism;
+    const std::string& magnetism = in.get().magnetism;
 
     const std::complex<double> zeroc(0.0,0.0);
     double omega;
@@ -96,7 +96,7 @@ namespace DMFT
         {
           for(int m=0; m<m_tot; m++)
           {
-            if(magnetism==3 || magnetism==4) //none magnetic or paramamagnetic
+            if(magnetism == "para" || magnetism == "none") //none magnetic or paramamagnetic
             {
               if(nspin==1) 
               {

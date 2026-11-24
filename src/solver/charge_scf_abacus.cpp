@@ -94,7 +94,7 @@ bool Charge_SCF_abacus::update(solver& task, int charge_step)
     auto& in=task.pars.in;
     auto& band=task.pars.bands;
     auto& atom=task.pars.atom;
-    if(band.soc() || band.nspins()!=1 || in.get().flag_magnetism!=3)
+    if(band.soc() || band.nspins()!=1 || in.get().magnetism != "para")
         throw std::runtime_error("ABACUS charge backend currently requires paramagnetic non-SOC nspin=1");
     const double beta=in.get().beta;
     const double mixing=in.get().charge_mix_param;

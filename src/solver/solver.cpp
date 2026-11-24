@@ -34,18 +34,12 @@ namespace DFT_plus_DMFT
 
     this->working_init();
 
-    switch(this->calculation_type)
-    {
-    case 0: //DFT+DMFT scf
+    if(this->pars.in.get().calculation == "scf")
       return this->DFT_DMFT_scf();
-      break;
-    case 1: //specctra
+    if(this->pars.in.get().calculation == "spectra")
       return this->cal_spectrum_func();
-      break;
-    default:
-      std::cerr << "Unknown calculation type" << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
+    std::cerr << "Unknown calculation type" << std::endl;
+    std::exit(EXIT_FAILURE);
 
     this->unset_ios(GLV::ofs_running);
 
@@ -67,7 +61,7 @@ namespace DFT_plus_DMFT
     int mix_step = 1;
     bool density_convergency = false;
     bool sigma_convergency = false;
-    const bool abacus_charge = pars.in.get().flag_DFT_solver==2 &&
+    const bool abacus_charge = pars.in.get().dft_solver == "abacus" &&
                                pars.in.get().max_charge_step>1;
     Charge_SCF_abacus abacus_backend;
     if(abacus_charge){
@@ -118,8 +112,8 @@ namespace DFT_plus_DMFT
       //       this->pars.in, this->space);
 
       this->proj.evaluate_projector(
-            pars.in.get().flag_projector,
-            pars.in.get().flag_DFT_solver,
+            pars.in.get().projector,
+            pars.in.get().dft_solver,
             pars.bands, this->space, this->pars.atom,
             pars.in.get().cwf_ep0,
             pars.in.get().cwf_ep1,
@@ -130,10 +124,10 @@ namespace DFT_plus_DMFT
             this->pars.in, this->pars.bands, 
             this->proj, this->pars.atom, this->space,
             this->pars.in.get().n_omega,
-            this->pars.in.get().flag_magnetism );
+            this->pars.in.get().magnetism );
 
       this->imp.sigma.dc.cal_double_counting( 
-            this->pars.in.get().flag_double_counting,
+            this->pars.in.get().double_counting,
             this->pars.bands.soc(), this->pars.bands.nspins(), 
             this->pars.atom, this->pars.in,
             this->pars.in.get().hyb_func,
@@ -164,13 +158,13 @@ namespace DFT_plus_DMFT
           if(this->pars.in.get().flag_restart && loop_count==1)
             this->imp.read_self_energy(
               true, last_char_step, last_DMFT_step,
-              pars.in.get().flag_impurity_solver,
+              pars.in.get().impurity_solver,
               this->pars.bands, this->pars.in, this->pars.atom );
 
         this->projecting_embeding(char_step, dmft_step);
 
         this->impurity_solving(
-            this->pars.in.get().flag_impurity_solver,
+            this->pars.in.get().impurity_solver,
               char_step, dmft_step, this->pars.atom );
 
         sigma_convergency = this->sigma_scf_update(char_step, dmft_step);
@@ -209,7 +203,7 @@ namespace DFT_plus_DMFT
         //==============================================================
         GLV::ofs_running << "================ Starting charge updating... ================" << std::endl;
         if(mix_step==1){
-          this->Char_scf.init(this->pars.in.get().flag_DFT_solver,
+          this->Char_scf.init(this->pars.in.get().dft_solver,
                 this->pars.in.get().charge_mix_param,
                 this->pars.in.get().mixing_step,
                 this->pars.in.get().delta_rho,
@@ -243,7 +237,7 @@ namespace DFT_plus_DMFT
         for(int dft_step=1; dft_step <= this->pars.in.get().max_dft_step; dft_step++)
         {
           GLV::ofs_running << "================  DFT step "  << dft_step << " ================" << std::endl;
-          this->run_nscf_dft(pars.in.get().flag_DFT_solver); //Run at least one dft step under each charge step
+          this->run_nscf_dft(pars.in.get().dft_solver); //Run at least one dft step under each charge step
           loop_count++;
 
           if(dft_step>1 && density_convergency) break;
@@ -289,7 +283,7 @@ namespace DFT_plus_DMFT
 
     this->imp.sigma.subtract_double_counting(this->flag_axis);
 
-    this->Umat.update_coulomb_tensor(this->pars.in.get().flag_interaction_type, this->pars.atom);
+    this->Umat.update_coulomb_tensor(this->pars.in.get().interaction_type, this->pars.atom);
 
     this->Mu.update_chemical_potential(
              this->flag_axis, this->pars.bands, 
@@ -314,7 +308,7 @@ namespace DFT_plus_DMFT
           this->pars.in, this->space);
     
     this->proj.evaluate_projector(
-          pars.in.get().flag_DFT_solver,
+          pars.in.get().dft_solver,
           pars.bands, this->space, this->pars.atom );
     
     this->imp.evaluate_local_occupation( 
@@ -322,10 +316,10 @@ namespace DFT_plus_DMFT
           this->proj, this->pars.atom,
           this->space, this->Mu.mu_DFT(),
           this->pars.in.get().n_omega,
-          this->pars.in.get().flag_magnetism );
+          this->pars.in.get().magnetism );
 
     this->imp.sigma.dc.cal_double_counting( 
-          this->pars.in.get().flag_double_counting,
+          this->pars.in.get().double_counting,
           this->pars.bands.soc(), this->pars.bands.nspins(), 
           this->pars.atom, this->pars.in,
           this->pars.in.get().hyb_func,
@@ -341,7 +335,7 @@ namespace DFT_plus_DMFT
   }
 
   void solver::impurity_solving(
-        const int impurity_solver,
+        const std::string& impurity_solver,
         const int char_step,
         const int DMFT_step,
         DFT_output::atoms_info& atom )
@@ -351,31 +345,36 @@ namespace DFT_plus_DMFT
     GLV::ofs_running << "\nImpurity solver starts working......" << std::endl;
     GLV::ofs_running << "  Impurities       starting time              ending time              time-consumption" << std::endl;
 
-    switch(impurity_solver)
+    if(impurity_solver == "alps-cthyb")
     {
-      case 1:
         // this->ALPS_hyb.solving(char_step, DMFT_step, 
         //        mu, in, atom, band, this->impurity_level, 
         //        this->sigma.sigma_new(0), this->Weiss_omega, this->hyb_omega);
-        break;
-      case 2:
+    }
+    else if(impurity_solver == "alps-cthyb-segment")
+    {
         // this->ALPS_hyb_segment.output(char_step, DMFT_step,
         //        mu, in, atom, band, this->impurity_level, 
         //        this->sigma.sigma_new(0), this->Weiss_omega);
-        break;
-      case 3:
+    }
+    else if(impurity_solver == "pacs")
+    {
         this->imp.pacs.impurities_solving(char_step, DMFT_step, atom);
-        break;
-      case 4:
+    }
+    else if(impurity_solver == "rutgers-cthyb")
+    {
         this->imp.Rutgers.impurities_solving(char_step, DMFT_step, atom);
-        break;
-      case 5: 
+    }
+    else if(impurity_solver == "iqist")
+    {
         this->imp.iQIST_narcissus.impurities_solving(char_step, DMFT_step, atom);
-        break;
-      case 6:
+    }
+    else if(impurity_solver == "comctqmc")
+    {
         this->imp.comctqmc.impurities_solving(char_step, DMFT_step, atom);
-        break;
-      default:
+    }
+    else
+    {
         std::cerr << "Not supported impurity solver" << std::endl;
         std::exit(EXIT_FAILURE);
     }
@@ -388,20 +387,18 @@ namespace DFT_plus_DMFT
   {
     debug::codestamp("solver::working_init");
 
-    this->calculation_type = this->pars.in.get().calculation_type;
-
-    if(this->calculation_type == 1) this->flag_axis = 1;   //spectra
-    else if(this->calculation_type == 0){                  //DFT+DMFT scf
-      const int impurity_solver = this->pars.in.get().flag_impurity_solver;
+    if(this->pars.in.get().calculation == "spectra") this->flag_axis = 1;
+    else if(this->pars.in.get().calculation == "scf"){
+      const std::string& impurity_solver = this->pars.in.get().impurity_solver;
       const double beta = pars.in.get().beta;
       const int nomega = pars.in.get().n_omega;
 
-      if(impurity_solver==1 || 
-         impurity_solver==2 || 
-         impurity_solver==3 ||
-         impurity_solver==4 ||
-         impurity_solver==5 ||
-         impurity_solver==6 )
+      if(impurity_solver == "alps-cthyb" ||
+         impurity_solver == "alps-cthyb-segment" ||
+         impurity_solver == "pacs" ||
+         impurity_solver == "rutgers-cthyb" ||
+         impurity_solver == "iqist" ||
+         impurity_solver == "comctqmc")
          this->flag_axis = 0;       //imaginary axis
       else this->flag_axis = 1;     //real axis
 
@@ -436,8 +433,8 @@ namespace DFT_plus_DMFT
     //       this->pars.in, this->space);
 
     this->proj.evaluate_projector(
-          pars.in.get().flag_projector,
-          pars.in.get().flag_DFT_solver,
+          pars.in.get().projector,
+          pars.in.get().dft_solver,
           pars.bands, this->space, this->pars.atom,
           pars.in.get().cwf_ep0,
           pars.in.get().cwf_ep1,
@@ -448,10 +445,10 @@ namespace DFT_plus_DMFT
           this->pars.in, this->pars.bands, 
           this->proj, this->pars.atom, this->space,
           this->pars.in.get().n_omega,
-          this->pars.in.get().flag_magnetism );
+          this->pars.in.get().magnetism );
 
     this->imp.sigma.dc.cal_double_counting( 
-          this->pars.in.get().flag_double_counting,
+          this->pars.in.get().double_counting,
           this->pars.bands.soc(), this->pars.bands.nspins(), 
           this->pars.atom, this->pars.in,
           this->pars.in.get().hyb_func,
@@ -529,7 +526,7 @@ namespace DFT_plus_DMFT
     //Call DFT solver to compute the charge density corresponding to 
     //the DMFT corrected density matrix
     // GLV::ofs_running << "Calculating DMFT corrected charge density..." << std::endl;
-    this->run_nscf_dft(pars.in.get().flag_DFT_solver);
+    this->run_nscf_dft(pars.in.get().dft_solver);
   
     //Read the charge density corresponding to 
     //the DMFT corrected density matrix
@@ -572,8 +569,8 @@ namespace DFT_plus_DMFT
     //         this->pars.in, this->space);
 
     this->proj.evaluate_projector(
-          pars.in.get().flag_projector,
-          pars.in.get().flag_DFT_solver,
+          pars.in.get().projector,
+          pars.in.get().dft_solver,
           pars.bands, this->space, this->pars.atom,
           pars.in.get().cwf_ep0,
           pars.in.get().cwf_ep1,
@@ -584,10 +581,10 @@ namespace DFT_plus_DMFT
           this->pars.in, this->pars.bands, 
           this->proj, this->pars.atom, this->space,
           this->pars.in.get().n_omega,
-          this->pars.in.get().flag_magnetism );
+          this->pars.in.get().magnetism );
 
     this->imp.sigma.dc.cal_double_counting( 
-          this->pars.in.get().flag_double_counting,
+          this->pars.in.get().double_counting,
           this->pars.bands.soc(), this->pars.bands.nspins(), 
           this->pars.atom, this->pars.in,
           this->pars.in.get().hyb_func,
@@ -613,7 +610,7 @@ namespace DFT_plus_DMFT
 
     this->imp.read_self_energy(
           false, charge_step, DMFT_step,
-          pars.in.get().flag_impurity_solver,
+          pars.in.get().impurity_solver,
           this->pars.bands, this->pars.in, this->pars.atom );
 
     convergency = this->imp.scf_condition(
@@ -657,12 +654,12 @@ namespace DFT_plus_DMFT
             this->pars.bands, this->proj, 
             this->pars.atom, this->space, this->Mu.mu_corrected(),
             this->pars.in.get().n_omega,
-            this->pars.in.get().flag_magnetism);
+            this->pars.in.get().magnetism);
 
-      if( this->pars.in.get().flag_impurity_solver==1 ||
-          this->pars.in.get().flag_impurity_solver==2 )
+      if(this->pars.in.get().impurity_solver == "alps-cthyb" ||
+         this->pars.in.get().impurity_solver == "alps-cthyb-segment")
         this->imp.evaluate_delta_Weiss_tau(
-              this->pars.in.get().flag_impurity_solver,
+              this->pars.in.get().impurity_solver,
               this->pars.atom, this->pars.bands.nspins(),
               this->pars.in.get().beta,
               this->pars.in.get().n_tau,
@@ -680,13 +677,13 @@ namespace DFT_plus_DMFT
         const int DMFT_step )
   {
     this->imp.out(charge_step, DMFT_step,
-            this->pars.in.get().flag_impurity_solver,
+            this->pars.in.get().impurity_solver,
             this->Mu.mu_corrected(), this->pars.bands, 
             this->pars.in, this->pars.atom, this->Umat );
 
     this->Umat.out_coulomb_tensor(
-            this->pars.in.get().flag_interaction_type, charge_step, DMFT_step,
-            this->pars.in.get().flag_impurity_solver,
+            this->pars.in.get().interaction_type, charge_step, DMFT_step,
+            this->pars.in.get().impurity_solver,
             this->pars.atom, this->pars.bands );
   }
 
@@ -725,7 +722,7 @@ namespace DFT_plus_DMFT
   }
 
   void solver::run_nscf_dft(
-      const int dft_solver )
+      const std::string& dft_solver )
   {
     debug::codestamp("solver::run_nscf_dft");
 
@@ -752,9 +749,7 @@ namespace DFT_plus_DMFT
     
     MPI_Barrier(MPI_COMM_WORLD);  //Blocks until all processes reach here
 
-    switch(dft_solver)
-    {
-      case 1: //FHI-aims
+    if(dft_solver == "aims")
       {
         #ifdef __FHIaims
           int unit = 6;
@@ -781,10 +776,9 @@ namespace DFT_plus_DMFT
           std::cerr << "Suggestion:Install FHI-aims and then re-compile the codes." << std::endl;
           std::exit(EXIT_FAILURE);
         #endif   
-        break;
       }
 
-      case 2: //ABACUS
+    else if(dft_solver == "abacus")
       {
         #ifdef __ABACUS
           // this->char_scf_aims.output_charge_density(file, dens_cmplx);
@@ -795,13 +789,13 @@ namespace DFT_plus_DMFT
           std::cerr << "Suggestion:Install ABACUS and then re-compile the codes." << std::endl;
           std::exit(EXIT_FAILURE);
         #endif
-        break;
       }
       
-      default:
+    else
+      {
         std::cerr << "Not supported DFT_solver" << std::endl;
         std::exit(EXIT_FAILURE);
-    }
+      }
     
     MPI_Barrier(MPI_COMM_WORLD);  //Blocks until all processes reach here
 

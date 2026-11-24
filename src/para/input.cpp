@@ -26,13 +26,13 @@ namespace DMFT
 
     // 步骤 1：仅为第 2 类参数设置固定默认值。
     // 第 1 类无默认值，第 4 类待依赖确定后补齐，第 3 类在校验后计算。
-    params.calculation_type = 0;
-    params.flag_DFT_solver = 1;
+    params.calculation = "scf";
+    params.dft_solver = "aims";
     params.temperature = 300.0;
-    params.flag_magnetism = 3;
-    params.flag_impurity_solver = 4;
-    params.flag_interaction_type = 1;
-    params.flag_double_counting = 1;
+    params.magnetism = "para";
+    params.impurity_solver = "rutgers-cthyb";
+    params.interaction_type = "density_density";
+    params.double_counting = "fll";
     params.projection_window = {-5.0, 5.0};
     params.max_charge_step = params.max_dmft_step = params.max_dft_step = 1;
     params.mc_step = 5000000;
@@ -45,7 +45,7 @@ namespace DMFT
     params.delta_rho = 1.0e-3;
     params.mixing_step = 8;
     params.charge_mix_param = 0.05;
-    params.flag_projector = 1;
+    params.projector = "nao";
     params.cwf_ep0 = -5.0;
     params.cwf_ep1 = 5.0;
     params.cwf_t = 0.01;
@@ -138,6 +138,15 @@ namespace DMFT
         if(parsed_input == choice.first) { value = choice.second; return; }
       fail(key, "unsupported option '" + parsed_input + "'");
     };
+    // string_option: validate an option and store its canonical string value.
+    auto string_option = [&](const std::string& key, std::string& value,
+                             std::initializer_list<std::pair<const char*, const char*>> options) {
+      if(!supplied(key, 1)) return;
+      const std::string parsed_input = strtolower(input_entries.at(key)[0]);
+      for(const auto& choice : options)
+        if(parsed_input == choice.first) { value = choice.second; return; }
+      fail(key, "unsupported option '" + parsed_input + "'");
+    };
     // window：读取两个浮点数，依次写入 value 的窗口下界和上界。
     // 未提供时不修改 value；这里只检查数值格式，窗口之间的约束在步骤 4 检查。
     auto window = [&](const std::string& key, std::vector<double>& value) {
@@ -159,16 +168,20 @@ namespace DMFT
     };
 
     // 第 2 类：用户输入覆盖固定默认值；未填写时保留默认值。
-    option("calculation", params.calculation_type, {{"scf", 0}, {"spectra", 1}});
-    option("dft_solver", params.flag_DFT_solver, {{"aims", 1}, {"abacus", 2}});
+    string_option("calculation", params.calculation, {{"scf", "scf"}, {"spectra", "spectra"}});
+    string_option("dft_solver", params.dft_solver, {{"aims", "aims"}, {"abacus", "abacus"}});
     real("temperature", params.temperature);
-    option("magnetism", params.flag_magnetism, {{"afm", 1}, {"fm", 2}, {"para", 3}, {"none", 4}});
-    option("impurity_solver", params.flag_impurity_solver,
-           {{"alps-cthyb", 1}, {"alps-cthyb-segment", 2}, {"pacs", 3}, {"rutgers-cthyb", 4}, {"iqist", 5},
-            {"comctqmc", 6}});
-    option("interaction_type", params.flag_interaction_type,
-           {{"density_density", 1}, {"kanamori", 2}, {"slater_condon", 3}, {"tensor", 4}});
-    option("double_counting", params.flag_double_counting, {{"fll", 1}, {"nominal", 2}, {"arbitrary", 3}});
+    string_option("magnetism", params.magnetism,
+                  {{"afm", "afm"}, {"fm", "fm"}, {"para", "para"}, {"none", "none"}});
+    string_option("impurity_solver", params.impurity_solver,
+                  {{"alps-cthyb", "alps-cthyb"}, {"alps-cthyb-segment", "alps-cthyb-segment"},
+                   {"pacs", "pacs"}, {"rutgers-cthyb", "rutgers-cthyb"}, {"iqist", "iqist"},
+                   {"comctqmc", "comctqmc"}});
+    string_option("interaction_type", params.interaction_type,
+                  {{"density_density", "density_density"}, {"kanamori", "kanamori"},
+                   {"slater_condon", "slater_condon"}, {"tensor", "tensor"}});
+    string_option("double_counting", params.double_counting,
+                  {{"fll", "fll"}, {"nominal", "nominal"}, {"arbitrary", "arbitrary"}});
     window("projection_window", params.projection_window);
     integer("max_charge_step", params.max_charge_step);
     integer("max_dmft_step", params.max_dmft_step);
@@ -185,7 +198,7 @@ namespace DMFT
     text("comctqmc_evalsim", params.comctqmc_evalsim);
     text("comctqmc_launcher", params.comctqmc_launcher);
     integer("local_symmetry", params.local_symmetry);
-    option("projector", params.flag_projector, {{"nao", 1}, {"default", 1}, {"cwf", 2}});
+    string_option("projector", params.projector, {{"nao", "nao"}, {"default", "nao"}, {"cwf", "cwf"}});
     real("cwf_ep0", params.cwf_ep0);
     real("cwf_ep1", params.cwf_ep1);
     real("cwf_t", params.cwf_t);
@@ -227,27 +240,28 @@ namespace DMFT
     if(!input_entries.count("dmft_step_first")) params.dmft_step_first = params.max_dmft_step;
 
     // 步骤 4：检查第 1 类的必填条件，以及第 2、4 类的取值和组合约束。
-    if(params.flag_double_counting == 2 && !input_entries.count("nf"))
+    if(params.double_counting == "nominal" && !input_entries.count("nf"))
       fail("nf", "required when double_counting is nominal; specify the nominal occupation explicitly");
     // 后端和求解器限制沿用原实现，不增加新的物理参数范围约束。
     #ifndef __FHIaims
-      if(params.flag_DFT_solver == 1) fail("dft_solver", "FHI-aims support is not compiled in");
+      if(params.dft_solver == "aims") fail("dft_solver", "FHI-aims support is not compiled in");
     #endif
     #ifndef __ABACUS
-      if(params.flag_DFT_solver == 2) fail("dft_solver", "ABACUS support is not compiled in");
+      if(params.dft_solver == "abacus") fail("dft_solver", "ABACUS support is not compiled in");
     #endif
-    if(params.flag_impurity_solver == 1 || params.flag_impurity_solver == 2)
+    if(params.impurity_solver == "alps-cthyb" || params.impurity_solver == "alps-cthyb-segment")
       fail("impurity_solver", "ALPS solvers are unsupported now");
     if(params.temperature <= 0.0) fail("temperature", "must be positive");
     if(params.dos_window[0] > params.projection_window[0] || params.dos_window[1] < params.projection_window[1])
       fail("dos_window", "must contain projection_window");
-    if(params.flag_projector == 2 && (!(params.cwf_ep0 < params.cwf_ep1) || !(params.cwf_t > 0.0)))
+    if(params.projector == "cwf" && (!(params.cwf_ep0 < params.cwf_ep1) || !(params.cwf_t > 0.0)))
       fail("projector", "CWF requires cwf_ep0 < cwf_ep1 and cwf_t > 0 (eV)");
     if(!(params.projection_min_weight > 0.0 && params.projection_min_weight <= 1.0))
       fail("projection_min_weight", "must be in (0,1]");
-    if(params.flag_interaction_type != 1 && params.flag_impurity_solver != 4 && params.flag_impurity_solver != 6)
+    if(params.interaction_type != "density_density" &&
+       params.impurity_solver != "rutgers-cthyb" && params.impurity_solver != "comctqmc")
       fail("interaction_type", "general interactions require rutgers-cthyb or comctqmc");
-    if(params.flag_impurity_solver == 6) {
+    if(params.impurity_solver == "comctqmc") {
       if(params.comctqmc_nproc < 0) fail("comctqmc_nproc", "must be non-negative");
       if(params.warmup < 0) fail("warmup", "must be non-negative");
       if(params.mc_step <= 0) fail("mc_step", "must be positive");
@@ -272,14 +286,14 @@ namespace DMFT
     // 依赖 DFT 输出的量仍由后续初始化计算；运行步数仍由求解模块维护。
     GLV::ofs_running << "=========== All parameters used in the running time ===========\n"
       << std::setprecision(12)
-      << "calculation  " << (params.calculation_type == 0 ? "scf" : "spectra") << '\n'
-      << "dft_solver  " << (params.flag_DFT_solver == 1 ? "aims" : "abacus") << '\n'
+      << "calculation  " << params.calculation << '\n'
+      << "dft_solver  " << params.dft_solver << '\n'
       << "temperature  " << params.temperature << '\n'
-      << "magnetism  " << std::vector<std::string>{"", "afm", "fm", "para", "none"}[params.flag_magnetism] << '\n'
-      << "impurity_solver  " << std::vector<std::string>{"", "alps-cthyb", "alps-cthyb-segment", "pacs", "rutgers-cthyb", "iqist", "comctqmc"}[params.flag_impurity_solver] << '\n'
-      << "interaction_type  " << std::vector<std::string>{"", "density_density", "kanamori", "slater_condon", "tensor"}[params.flag_interaction_type] << '\n'
-      << "double_counting  " << std::vector<std::string>{"", "fll", "nominal", "arbitrary"}[params.flag_double_counting] << '\n';
-    if(params.flag_double_counting == 2) GLV::ofs_running << "nf  " << params.nf << '\n';
+      << "magnetism  " << params.magnetism << '\n'
+      << "impurity_solver  " << params.impurity_solver << '\n'
+      << "interaction_type  " << params.interaction_type << '\n'
+      << "double_counting  " << params.double_counting << '\n';
+    if(params.double_counting == "nominal") GLV::ofs_running << "nf  " << params.nf << '\n';
     GLV::ofs_running
       << "projection_window  " << params.projection_window[0] << "  " << params.projection_window[1] << '\n'
       << "dos_window  " << params.dos_window[0] << "  " << params.dos_window[1] << '\n'
@@ -292,7 +306,7 @@ namespace DMFT
       << "mixing_step  " << params.mixing_step << '\n'
       << "charge_mix_param  " << params.charge_mix_param << '\n'
       << "mc_step  " << params.mc_step << '\n';
-    if(params.flag_impurity_solver == 6) GLV::ofs_running
+    if(params.impurity_solver == "comctqmc") GLV::ofs_running
       << "comctqmc_nproc  " << params.comctqmc_nproc << '\n'
       << "warmup  " << params.warmup << '\n'
       << "comctqmc_exe  " << params.comctqmc_exe << '\n'
@@ -300,9 +314,9 @@ namespace DMFT
       << "comctqmc_launcher  " << params.comctqmc_launcher << '\n';
     GLV::ofs_running
       << "local_symmetry  " << params.local_symmetry << '\n'
-      << "projector  " << (params.flag_projector == 1 ? "nao" : "cwf") << '\n'
+      << "projector  " << params.projector << '\n'
       << "projection_min_weight  " << params.projection_min_weight << '\n';
-    if(params.flag_projector == 2) GLV::ofs_running
+    if(params.projector == "cwf") GLV::ofs_running
       << "cwf_ep0  " << params.cwf_ep0 << " eV relative to E_F\n"
       << "cwf_ep1  " << params.cwf_ep1 << " eV relative to E_F\n"
       << "cwf_t  " << params.cwf_t << " eV\n";

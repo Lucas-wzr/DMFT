@@ -11,15 +11,13 @@ namespace DMFT
     double nf;                      //nominal occupation; required for double_counting=nominal, no default
 
     // 第 2 类：有默认值的参数，默认值在 read() 中设置。
-    // Integer flags and hyb_func are internal representations of input options.
-    int flag_DFT_solver;            //1:aims, 2:ABACUS
+    // String-valued input options.
+    std::string dft_solver;         //aims, abacus
     double temperature;             //unit:Kelvin; default:300
-    int flag_magnetism;             //AFM:1, FM:2, paramagenetism:3, none:4
-    //ALPS-CTHYB:1;  LPS-CTHYB-SEGMENT:2; (not supported now)
-    //PACS:3; Rutgers-CTHYB:4; iQIST:5; ComCTQMC:6; default:4
-    int flag_impurity_solver;    
-    int flag_interaction_type;        // density_density:1, kanamori:2, slater_condon:3, tensor:4; default:1
-    int flag_double_counting;       //fll:1, nominal:2, arbitrary:3;   default:1
+    std::string magnetism;          //afm, fm, para, none
+    std::string impurity_solver;    //default:rutgers-cthyb
+    std::string interaction_type;   //default:density_density
+    std::string double_counting;    //default:fll
     int max_charge_step;            //number of the maximum charge self-consistent interation loop; default:1
     int max_dmft_step;              //number of the maximum DMFT interation step under each charge loop; default:1
     int max_dft_step;               //number of the maximum DFT interation step under each charge loop; default:1
@@ -36,7 +34,7 @@ namespace DMFT
     double charge_mix_param;         //The charge density mixing parameter; default:0.05
     double delta_sigma;             //The convergency criteria of self-energy (unit eV); default:0.1
     double delta_rho;               //The convergency criteria of the charge density; default: 1.0e-3
-    int calculation_type;           //DFT+DMFT scf:0; spectra:1; default:0
+    std::string calculation;        //scf, spectra; default:scf
     int mixing_step;                //Number of past iteration include in the density mixing; default:8
 
     // Four values supplied by the restart input keyword.
@@ -46,7 +44,7 @@ namespace DMFT
     int last_DMFT_step;             //The last one step before the stsrting step of DMFT loop; default:1
 
     int local_symmetry;             //0:none, 1:cubic, 2:t2g only, 3:eg only; default:0
-    int flag_projector;             //nao (compatibility alias: default):1; cwf:2; default:nao
+    std::string projector;          //nao (compatibility alias: default), cwf; default:nao
     double cwf_ep0;                 //lower CWF window edge relative to E_F; unit:eV; default:-5.0
     double cwf_ep1;                 //upper CWF window edge relative to E_F; unit:eV; default:5.0
     double cwf_t;                   //CWF window smoothing energy, independent of temperature; unit:eV; default:0.01
@@ -82,5 +80,4 @@ namespace DMFT
   };
 }
 
-// TODO: Choose strings or named enums for options as appropriate; avoid requiring
-// all options to be numeric flags or introducing a full registration framework.
+// hyf_dc_mode remains integer-encoded; other string-valued options are stored canonically.

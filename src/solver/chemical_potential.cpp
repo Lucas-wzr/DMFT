@@ -68,7 +68,7 @@ namespace DFT_plus_DMFT
     const int nomega = in.get().n_omega;
     const int nks=band.nk();
     const int nspin=band.nspins();
-    const int magnetism = in.get().flag_magnetism;
+    const std::string& magnetism = in.get().magnetism;
     const std::vector<int>& wbands=space.Wbands();
     const int n_valence = space.valence();
     const std::vector<double>& window = space.Ener_window();
@@ -207,7 +207,7 @@ namespace DFT_plus_DMFT
             DMFT::self_energy& sigma,
             DFT_output::atoms_info& atom,
             DFT_plus_DMFT::projector& proj,
-            const double beta, const int mag, const double mu)
+            const double beta, const std::string& mag, const double mu)
   {
     debug::codestamp("chemical_potential::evaluate_electrons_number_imag");
 
@@ -427,7 +427,7 @@ namespace DFT_plus_DMFT
 
   const int nks = band.nk();
   const int nspin = band.nspins();
-  const int magnetism = in.get().flag_magnetism;
+  const std::string& magnetism = in.get().magnetism;
   const std::vector<int>& wbands = space.Wbands();
   const std::vector<double>& freq = sigma.sigma_imag.Matsubara_freq();
   const int nomega = (int)freq.size();
@@ -494,7 +494,7 @@ double DFT_plus_DMFT::chemical_potential::evaluate_electrons_number_imag_fit(
     DMFT::self_energy& sigma,
     DFT_output::atoms_info& atom,
     DFT_plus_DMFT::projector& proj,
-    const double beta, const int mag, const double mu,
+    const double beta, const std::string& mag, const double mu,
     int n_tail_fit)
 {
   debug::codestamp("chemical_potential::evaluate_electrons_number_imag_fit");
